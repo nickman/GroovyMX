@@ -25,8 +25,10 @@
 package org.helios.gmx;
 
 import groovy.lang.GroovyObject;
+import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +45,7 @@ import javax.management.MBeanParameterInfo;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 
+import org.helios.gmx.util.JMXHelper;
 import org.helios.gmx.util.Primitive;
 
 /**
@@ -64,6 +67,33 @@ public class MetaMBean implements GroovyObject {
 	protected final Set<String> attributeNames = new CopyOnWriteArraySet<String>();
 	/** A map of operations keyed by operation name with a set of all signatures for that name as the value */
 	protected final Map<String, Set<OperationSignature>> operations = new HashMap<String, Set<OperationSignature>>();
+	/** The instance MetaClass */
+	protected MetaClass metaClass;
+	
+	
+	/**
+	 * Creates a new MetaMBean
+	 * @param objectName The JMX ObjectName
+	 * @param connection The JMX MBeanServerConnection
+	 * @return a MetaMBean
+	 */
+	public static MetaMBean newInstance(ObjectName objectName, MBeanServerConnection connection) {
+		if(objectName==null) throw new IllegalArgumentException("The passed ObjectName was null", new Throwable());
+		if(connection==null) throw new IllegalArgumentException("The passed MBeanServerConnection was null", new Throwable());
+		return new MetaMBean(objectName, connection);
+	}
+	
+	/**
+	 * Creates a new MetaMBean
+	 * @param objectName The JMX ObjectName
+	 * @param connection The JMX MBeanServerConnection
+	 * @return a MetaMBean
+	 */
+	public static MetaMBean newInstance(CharSequence objectName, MBeanServerConnection connection) {
+		return newInstance(JMXHelper.objectName(objectName), connection);
+	}
+	
+	
 	
 	/**
 	 * Creates a new MetaMBean
@@ -99,8 +129,10 @@ public class MetaMBean implements GroovyObject {
 	 */
 	@Override
 	public MetaClass getMetaClass() {
-		// TODO Auto-generated method stub
-		return null;
+        if (metaClass == null) {
+            metaClass = GroovySystem.getMetaClassRegistry().getMetaClass(MetaMBean.class);
+        }
+        return metaClass;
 	}
 
 	/**
@@ -112,7 +144,7 @@ public class MetaMBean implements GroovyObject {
 		if(attributeNames.contains(propertyName)) {
 			return _getAttribute(propertyName);
 		}
-		return null;
+		return getMetaClass().getProperty(this, propertyName);
 	}
 	
 	
@@ -134,9 +166,39 @@ public class MetaMBean implements GroovyObject {
 	 * @see groovy.lang.GroovyObject#invokeMethod(java.lang.String, java.lang.Object)
 	 */
 	@Override
-	public Object invokeMethod(String name, Object args) {
-		// TODO Auto-generated method stub
-		return null;
+	public Object invokeMethod(String name, Object arg) {
+		Set<OperationSignature> opSigs = operations.get(name);
+		Object[] args = null;
+		if(arg.getClass().isArray()) {
+			int length = Array.getLength(arg);
+			args = new Object[length];
+			System.arraycopy(arg, 0, args, 0, length);
+		} else {
+			args = new Object[]{arg};
+		}
+		if(opSigs!=null) {
+			if(opSigs.size()==1) {
+				try {
+					return connection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
+				} catch (Exception e) {
+					throw new RuntimeException("Failed to invoke operation [" + name + "]", e);
+				}
+			} else {
+				for(OperationSignature os: opSigs) {
+					if(os.getSignature().length==args.length) {
+						try {
+							return connection.invoke(objectName, name, args, os.getStrSignature());
+						} catch (Exception e) {
+							throw new RuntimeException("Failed to invoke operation [" + name + "]", e);
+						}						
+					}
+				}
+				throw new UnsupportedOperationException("Overloaded MBean Operations Not Supported Yet. (Coming Soon)", new Throwable());				
+			}
+		} else {
+			return getMetaClass().invokeMethod(this, name, args);
+		}
+		
 	}
 
 	/**
@@ -182,6 +244,9 @@ public class MetaMBean implements GroovyObject {
 	public static class OperationSignature {
 		/** The classes represented in the sgnature */
 		protected final Class<?>[] signature;
+		/** The classes represented in the sgnature */
+		protected final String[] strSignature;
+		
 		/** The hash code of this instance */
 		protected final int hashCode;
 		
@@ -201,10 +266,13 @@ public class MetaMBean implements GroovyObject {
 		 */
 		private OperationSignature(MBeanParameterInfo...infos) {			
 			List<Class<?>> sig = new ArrayList<Class<?>>(infos==null ? 0 : infos.length);	
+			List<String> strSig = new ArrayList<String>(infos==null ? 0 : infos.length);
 			StringBuilder b = new StringBuilder(getClass().getName());
 			if(infos!=null) {
 				for(MBeanParameterInfo pinfo: infos) {
 					String className = pinfo.getType();
+					strSig.add(className);
+					b.append(className);
 					if(Primitive.isPrimitiveName(className)) {
 						sig.add(Primitive.getPrimitive(className).getPclazz());
 					} else {
@@ -213,13 +281,13 @@ public class MetaMBean implements GroovyObject {
 							clazz = Class.forName(className);							
 						} catch (Exception e) {
 							clazz = UnknownClass.class;
-						}
-						b.append(clazz.getName());
+						}						
 						sig.add(clazz);
 					}
 				}
 			}
 			signature = sig.toArray(new Class[sig.size()]);
+			strSignature = strSig.toArray(new String[strSig.size()]);
 			hashCode = b.toString().hashCode();
 		}
 		
@@ -242,6 +310,22 @@ public class MetaMBean implements GroovyObject {
 			} else {
 				return false;
 			}
+		}
+
+		/**
+		 * Returns the operation signature
+		 * @return the signature
+		 */
+		public Class<?>[] getSignature() {
+			return signature.clone();
+		}
+
+		/**
+		 * Returns the operation signature as a string array
+		 * @return the stringified signature
+		 */
+		public String[] getStrSignature() {
+			return strSignature;
 		}
 	}
 

@@ -193,6 +193,30 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	}
 	
 	// =========================================================================================
+	//	MetaMBean operations
+	// =========================================================================================
+	
+	/**
+	 * Returns a MetaMBean for the passed ObjectName registered in this MBeanServer
+	 * @param objectName The ObjectName of the MetaMBean 
+	 * @return a MetaMBean for the passed ObjectName
+	 */
+	public MetaMBean mbean(CharSequence objectName) {
+		return MetaMBean.newInstance(objectName, this.mbeanServerConnection);
+	}
+	
+	/**
+	 * Returns a MetaMBean for the passed ObjectName registered in this MBeanServer
+	 * @param objectName The ObjectName of the MetaMBean 
+	 * @return a MetaMBean for the passed ObjectName
+	 */
+	public MetaMBean mbean(ObjectName objectName) {
+		return MetaMBean.newInstance(objectName, this.mbeanServerConnection);
+	}
+	
+	
+	
+	// =========================================================================================
 	//	GroovyObject implementation
 	// =========================================================================================
 	
