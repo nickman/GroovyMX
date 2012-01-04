@@ -6,27 +6,36 @@ import org.junit.rules.*;
 
 
 class GmxLocalTestCase extends GroovyTestCase {
-
-    void testLocalDomain()  {
+	def pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+	
+    void testGroovyLocalDomain()  {
     	def localDomain = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
     	def gmx = Gmx.newInstance();
     	assert gmx.defaultDomain == localDomain;        
     }
     
-    void testLocalMetaMBeanAttribute() {
+    void testGroovyLocalMetaMBeanAttribute() {
     	def runtimeName = ManagementFactory.getRuntimeMXBean().getName();
     	def gmx = Gmx.newInstance();
     	def runtimeBean = gmx.mbean(ManagementFactory.RUNTIME_MXBEAN_NAME);
     	assert runtimeBean.Name == runtimeName;
     }
     
-    void testLocalMetaMBeanOperation() {
+    void testGroovyLocalMetaMBeanOperation() {
     	long tId = Thread.currentThread().getId();
     	def tInfo = ManagementFactory.getThreadMXBean().getThreadInfo(tId);
     	def gmx = Gmx.newInstance();
     	def threadingBean = gmx.mbean(ManagementFactory.THREAD_MXBEAN_NAME);
     	ThreadInfo tInfo2 = ThreadInfo.from(threadingBean.getThreadInfo(tId));
     }
+    
+    void testGroovyAttachedLocalDomain()  {
+    	def localDomain = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
+    	def gmx = Gmx.attachInstance(pid);
+    	assert gmx.defaultDomain == localDomain;        
+    }
+    
+    
     
 }
 
