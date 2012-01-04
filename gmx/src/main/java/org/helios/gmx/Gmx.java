@@ -30,7 +30,6 @@ import groovy.lang.MetaClass;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -50,15 +49,20 @@ import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerFactory;
 import javax.management.NotCompliantMBeanException;
+import javax.management.Notification;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
 import javax.management.ObjectInstance;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
 import javax.management.ReflectionException;
+import javax.management.remote.JMXConnectionNotification;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
+
+import org.helios.vm.VirtualMachine;
+import org.helios.vm.VirtualMachineBootstrap;
 
 /**
  * <p>Title: Gmx</p>
@@ -77,7 +81,7 @@ import javax.management.remote.JMXServiceURL;
  * Authentication for remote connections
  */
 
-public class Gmx implements GroovyObject, MBeanServerConnection {
+public class Gmx implements GroovyObject, MBeanServerConnection, NotificationListener {
 	
 	/** The wrapped MBeanServer connection */
 	protected MBeanServerConnection mbeanServerConnection;
@@ -89,6 +93,9 @@ public class Gmx implements GroovyObject, MBeanServerConnection {
 	protected JMXServiceURL serviceURL =  null;
 	/** The JMXConnector environment */
 	protected final Map<String, ?> environment = new HashMap<String, Object>();
+	/** The JMXConnector's connection Id */
+	protected String connectionId = null;
+	
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
 	
@@ -119,6 +126,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection {
 		try {
 			this.connector = JMXConnectorFactory.connect(serviceURL);
 			this.mbeanServerConnection = connector.getMBeanServerConnection();
+			this.connectionId = connector.getConnectionId();
+			connector.addConnectionNotificationListener(this, null, this.connectionId);
 			if(this.mbeanServerConnection instanceof MBeanServer) {
 				this.mbeanServer = (MBeanServer)this.mbeanServerConnection;
 			} else {
@@ -152,6 +161,17 @@ public class Gmx implements GroovyObject, MBeanServerConnection {
 			}
 		}
 		throw new IllegalArgumentException("No MBeanServer found for default domain name [" + defaultDomain + "]", new Throwable());
+	}
+	
+	/**
+	 * Uses the <a ref="http://docs.oracle.com/javase/6/docs/jdk/api/attach/spec/index.html">VM Attach API</a> to connect to a local VM and acquire an MBeanServerConnection.
+	 * @param vmId The target virtual machine identifier, or, usually, the JVM's process id.
+	 * @return a remote type Gmx to a local JVM outside this VM.
+	 */
+	public static Gmx attachInstance(String vmId) {
+		VirtualMachineBootstrap.getInstance();
+		VirtualMachine vm = VirtualMachine.attach(vmId);
+		return new Gmx(vm.getJMXServiceURL(), new HashMap<String, Object>(0));
 	}
 	
 	/**
@@ -480,10 +500,65 @@ public class Gmx implements GroovyObject, MBeanServerConnection {
 			IOException {
 		mbeanServerConnection.unregisterMBean(name);
 	}
+
 	
 	// =========================================================================================
-	//	MBeanServer implementation
+	//	NotificationListener implementation
 	// =========================================================================================
 	
+	/**
+	 * Callback when this connection is opened
+	 * @param connNot The connection notification
+	 */
+	public void onConnectionOpened(JMXConnectionNotification connNot) {
+		System.out.println("Connection Opened:" + connNot);
+	}
+	
+	/**
+	 * Callback when this connection is closed
+	 * @param connNot The connection notification
+	 */
+	public void onConnectionClosed(JMXConnectionNotification connNot) {
+		System.out.println("Connection Closed:" + connNot);
+	}
+
+	/**
+	 * Callback when this connection fails
+	 * @param connNot The connection notification
+	 */
+	public void onConnectionFailed(JMXConnectionNotification connNot) {
+		System.out.println("Connection Failed:" + connNot);
+	}
+	
+	/**
+	 * Callback when this connection may have lost notifications
+	 * @param connNot The connection notification
+	 */
+	public void onConnectionLostNotifications(JMXConnectionNotification connNot) {
+		System.out.println("Connection Lost Notifications:" + connNot);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * <p>Delegates notifications:<ul>
+	 * 	<li>{@link JMXConnectionNotification}s: Delegated locally to Gmx</li>
+	 * </ul>
+	 * @see javax.management.NotificationListener#handleNotification(javax.management.Notification, java.lang.Object)
+	 */
+	public void handleNotification(Notification notification, Object handback) {
+		if(notification instanceof JMXConnectionNotification) {
+			JMXConnectionNotification connNot = (JMXConnectionNotification)notification;
+			String type = connNot.getType();
+			if(JMXConnectionNotification.CLOSED.equals(type)) {
+				onConnectionClosed(connNot);
+			} else if(JMXConnectionNotification.FAILED.equals(type)) {
+				onConnectionFailed(connNot);
+			} else if(JMXConnectionNotification.OPENED.equals(type)) {
+				onConnectionOpened(connNot);
+			} else if(JMXConnectionNotification.NOTIFS_LOST.equals(type)) {
+				onConnectionLostNotifications(connNot);
+			}
+		}
+	}
 
 }

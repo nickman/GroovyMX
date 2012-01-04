@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -78,9 +79,11 @@ public class VirtualMachineBootstrap {
 	 * Returns the VirtualMachineBootstrap instance
 	 * @return the VirtualMachineBootstrap instance
 	 */
-	public static VirtualMachineBootstrap getInstance() {
+	public static VirtualMachineBootstrap getInstance() {		
 		return getInstance(null);
 	}
+	
+	
 
 	
 	/**
@@ -181,12 +184,12 @@ public class VirtualMachineBootstrap {
 		for(String s: altLocs) {
 			try {
 				File toolsLoc = new File(s);
-				log("Testing [" + toolsLoc + "]");
+				//log("Testing [" + toolsLoc + "]");
 				if(toolsLoc.exists()) {
 					URL url = toolsLoc.toURI().toURL();
 					URLClassLoader ucl = new URLClassLoader(new URL[]{url}, ClassLoader.getSystemClassLoader());
 					if(inClassPath(ucl)) {
-						log("Attach API Found And Loaded [" + toolsLoc + "]");						
+						//log("Attach API Found And Loaded [" + toolsLoc + "]");						
 						return;
 					}
 				}
@@ -199,7 +202,7 @@ public class VirtualMachineBootstrap {
 	}
 	
 	public static void main(String[] args) {
-		findAttachAPI();
+		//findAttachAPI();
 		log("VMBoot:" + inClassPath());
 		VirtualMachineBootstrap vmb = getInstance();		
 //		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
@@ -228,8 +231,26 @@ public class VirtualMachineBootstrap {
 			log("Testing VMD (" + vmd.id() + ") [" + vmd.displayName() + "]   Name:" + vmd.provider().name() + "  Type:" + vmd.provider().type());
 			if(id.equals(vmd.id())) {
 				VirtualMachine vm = ap.attachVirtualMachine(vmd);
-				log("This VM:" + vm.toString());				
+				log("This VM:" + vm.toString());	
+				Properties agentProps = vm.getAgentProperties();
+				for(Map.Entry<Object, Object> p: agentProps.entrySet()) {
+					log("\t\t" + p.getKey() + ":" + p.getValue());
+				}
 			}
+			if(vmd.id().equals("15684")) {
+//				log("==============  System Props  ==============");
+//				Properties sysProps = ap.attachVirtualMachine(vmd).getSystemProperties();
+//				for(Map.Entry<Object, Object> p: sysProps.entrySet()) {
+//					log("\t\t" + p.getKey() + ":" + p.getValue());
+//				}
+				log("==============  Agent Props  ==============");
+				Properties agentProps = ap.attachVirtualMachine(vmd).getAgentProperties();
+				for(Map.Entry<Object, Object> p: agentProps.entrySet()) {
+					log("\t\t" + p.getKey() + ":" + p.getValue());
+				}
+				
+			}				
+			
 		}
 		
 //		BaseWrappedClass.getMethodMapping(vmb.classCache.get(VM_CLASS));

@@ -24,11 +24,17 @@
  */
 package org.helios.vm;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+
+import javax.management.MBeanServerConnection;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
 
 /**
  * <p>Title: VirtualMachine</p>
@@ -42,6 +48,18 @@ import java.util.concurrent.ConcurrentHashMap;
 public class VirtualMachine extends BaseWrappedClass {
 	/** A map of virtual machine keyed by their system identity hash codes */
 	private static final Map<Integer, VirtualMachine> vmInstances = new ConcurrentHashMap<Integer, VirtualMachine>();
+	/** The JMXServiceURL of this VirtualMachine */
+	private volatile JMXServiceURL jmxServiceURL = null;
+	/** The agent property representing the JMXServiceURL of the management agent */
+	public static final String CONNECTOR_ADDRESS = "com.sun.management.jmxremote.localConnectorAddress";
+	/** The system property representing the file separator */
+	public static final String FILE_SEP = "file.separator";
+	/** The system property representing the JMX Remote Port */
+	public static final String JMX_PORT = "com.sun.management.jmxremote.port";	
+	/** The JMX management agent jar name */
+	public static final String JMX_AGENT = "management-agent.jar";
+	/** The system property representing the java home */
+	public static final String JAVA_HOME = "java.home";
 	
 	/**
 	 * Retrieves the VirtualMachine wrapper class for the passed VirtualMachine delegate 
@@ -301,8 +319,64 @@ public class VirtualMachine extends BaseWrappedClass {
 		} finally {
 			popCl();
 		}				
-	}	
+	}
 	
+	/**
+	 * Returns a {@link MBeanServerConnection} to this VM instance
+	 * @return a {@link MBeanServerConnection} to this VM instance
+	 */
+	public MBeanServerConnection getMBeanServerConnection() {		
+		try {			
+			return getJMXConnector().getMBeanServerConnection();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to acquire MBeanServerConnection from VirtualMachine [" + id() + "]", e);
+		}
+	}
+	
+	
+	/**
+	 * Returns a {@link JMXConnector} to this VM instance
+	 * @return a {@link JMXConnector} to this VM instance
+	 */
+	public JMXConnector getJMXConnector() {		
+		try {
+			JMXServiceURL serviceURL = getJMXServiceURL();
+			return JMXConnectorFactory.connect(serviceURL);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to acquire JMXConnector from VirtualMachine [" + id() + "]", e);
+		}
+	}
+	
+	/**
+	 * Returns a {@link JMXServiceURL} to connect to this VM instance
+	 * @return a {@link JMXServiceURL} to connect to this VM instance
+	 * TODO: We need to allow this using authentication.
+	 */
+	public JMXServiceURL getJMXServiceURL() {
+		if(jmxServiceURL==null) {
+			synchronized(this) {
+				if(jmxServiceURL==null) {
+					try {
+						String connAddr = getAgentProperties().getProperty(CONNECTOR_ADDRESS);
+						if(connAddr==null) {
+							Properties sysProps = getSystemProperties();
+							String fileSep = sysProps.getProperty(FILE_SEP, File.separator);
+							String javaHome = sysProps.getProperty(JAVA_HOME);
+							String agentPath = String.format("%s%slib%s%s", javaHome, fileSep, fileSep, JMX_AGENT);
+							loadAgent(agentPath, JMX_PORT + "=" + FreePortFinder.getNextFreePort() + ",com.sun.management.jmxremote.authenticate=false");
+							connAddr = getAgentProperties().getProperty(CONNECTOR_ADDRESS);
+						}
+						if(connAddr==null) throw new RuntimeException("Failed to acquire JMXServiceURL for MBeanServerConnection to VirtualMachine [" + id() + "]", new Throwable());
+						jmxServiceURL =  new JMXServiceURL(connAddr);			
+					} catch (Exception e) {
+						throw new RuntimeException("Failed to acquire JMXServiceURL from VirtualMachine [" + id() + "]", e);
+					}
+					
+				}
+			}
+		}
+		return jmxServiceURL;
+	}
 
 }
 
