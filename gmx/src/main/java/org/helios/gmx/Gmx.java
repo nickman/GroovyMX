@@ -79,6 +79,7 @@ import org.helios.vm.VirtualMachineBootstrap;
  * Remote MBeanServer Class Load
  * Auto Reconnect
  * Authentication for remote connections
+ * Composite type attributes and operation return values
  */
 
 public class Gmx implements GroovyObject, MBeanServerConnection, NotificationListener {
