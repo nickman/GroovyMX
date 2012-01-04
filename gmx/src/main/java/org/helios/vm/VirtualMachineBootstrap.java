@@ -96,7 +96,11 @@ public class VirtualMachineBootstrap {
 			synchronized(lock) {
 				if(instance==null) {
 					instance = new VirtualMachineBootstrap(urlLocation);
-					AttachProvider.init();
+					try {
+						AttachProvider.init();
+					} catch (Exception e) {
+						throw new RuntimeException("Failed to load Attach API Class. (If you are running a JRE, you need to use a JDK with a tools.jar", e);
+					}
 				}
 			}
 		}
@@ -118,7 +122,7 @@ public class VirtualMachineBootstrap {
 			BaseWrappedClass.getMethodMapping(classCache.get(VM_DESC_CLASS));
 			BaseWrappedClass.getMethodMapping(classCache.get(ATTACH_PROVIDER_CLASS));
 		} catch (Exception e) {
-			throw new RuntimeException("Failed to load Attach API Class", e);
+			throw new RuntimeException("Failed to load Attach API Class. (If you are running a JRE, you need to use a JDK with a tools.jar", e);
 		}		
 	}
 	
@@ -154,7 +158,7 @@ public class VirtualMachineBootstrap {
 		if(attachClassLoader.get()!=null) return true;
 		try {
 			Class<?> clazz = Class.forName(VM_CLASS, true, classLoader);
-			attachClassLoader.set(clazz.getClassLoader());
+			attachClassLoader.set(clazz.getClassLoader()==null ? classLoader : clazz.getClassLoader());
 			return true;
 		} catch (Exception e) {
 			return false;
@@ -202,7 +206,7 @@ public class VirtualMachineBootstrap {
 	}
 	
 	public static void main(String[] args) {
-		//findAttachAPI();
+		findAttachAPI();
 		log("VMBoot:" + inClassPath());
 		VirtualMachineBootstrap vmb = getInstance();		
 //		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {

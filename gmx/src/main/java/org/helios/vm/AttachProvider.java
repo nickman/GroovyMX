@@ -171,7 +171,7 @@ public class AttachProvider extends BaseWrappedClass {
 				getInstance(del);
 			}			
 		} catch (Exception e) {
-			throw new RuntimeException("Failed to initialize AttachProvider Cache", new Throwable());
+			throw new RuntimeException("Failed to initialize AttachProvider Cache", e);
 		} finally {
 			popCl();
 		}
