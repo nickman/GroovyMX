@@ -42,9 +42,9 @@ public class GmxTestCase {
 	 * @see junit.framework.TestCase#setUp()
 	 */	
 	@Before
-	public void setUp() throws Exception {
+	public void setUp() {
 		String methodName = testName.getMethodName();
-		LOG.debug("\n\t******\n\t Test [" + getClass().getSimpleName() + "." + methodName + "]\n\t ******");
+		LOG.debug("\n\t******\n\t Test [" + getClass().getSimpleName() + "." + methodName + "]\n\t******");
 	}
 	
 	
