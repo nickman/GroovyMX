@@ -3,8 +3,7 @@ package org.helios.gmx;
 
 import java.lang.management.ManagementFactory;
 
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
+
 
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
