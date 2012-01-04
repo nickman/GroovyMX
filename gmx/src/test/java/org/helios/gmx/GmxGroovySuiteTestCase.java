@@ -34,13 +34,13 @@ import java.util.Set;
 import junit.framework.TestSuite;
 
 /**
- * <p>Title: GmxGroovyTestSuite</p>
+ * <p>Title: GmxGroovySuiteTestCase</p>
  * <p>Description: Test suite for Groovy based unit tests</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>org.helios.gmx.GmxGroovyTestSuite</code></p>
+ * <p><code>org.helios.gmx.GmxGroovySuiteTestCase</code></p>
  */
-public class GmxGroovyTestSuite extends TestSuite {
+public class GmxGroovySuiteTestCase extends TestSuite {
 	/** The root location of the groovy unit test source */
 	public static final String TEST_ROOT = "./src/test/groovy";
 	
