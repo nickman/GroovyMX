@@ -24,14 +24,466 @@
  */
 package org.helios.gmx;
 
+import groovy.lang.GroovyObject;
+import groovy.lang.GroovySystem;
+import groovy.lang.MetaClass;
+
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
+import javax.management.Attribute;
+import javax.management.AttributeList;
+import javax.management.AttributeNotFoundException;
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.InstanceNotFoundException;
+import javax.management.IntrospectionException;
+import javax.management.InvalidAttributeValueException;
+import javax.management.ListenerNotFoundException;
+import javax.management.MBeanException;
+import javax.management.MBeanInfo;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.MBeanServerConnection;
+import javax.management.MBeanServerFactory;
+import javax.management.NotCompliantMBeanException;
+import javax.management.NotificationFilter;
+import javax.management.NotificationListener;
+import javax.management.ObjectInstance;
+import javax.management.ObjectName;
+import javax.management.QueryExp;
+import javax.management.ReflectionException;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
+
 /**
  * <p>Title: Gmx</p>
  * <p>Description: A factory for {@link javax.management.MBeanServerConnection}s and invocation facade.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>org.helios.gmx.Gmx</code></p>
+ * TODO:
+ * MBeanServer[Connection] by JMXServiceURL, JMXServiceURL String and protocol components. 
+ * MBeanServer[Connection] interface impl.
+ * Property and invocation impl.
+ * MBeanServerConnection connection listener
+ * VMConnection by pid.  (and remote)
+ * Remote MBeanServer Class Load
+ * Auto Reconnect
+ * Authentication for remote connections
  */
 
-public class Gmx {
+public class Gmx implements GroovyObject, MBeanServerConnection {
+	
+	/** The wrapped MBeanServer connection */
+	protected MBeanServerConnection mbeanServerConnection;
+	/** The wrapped MBeanServer populated if the connection is an MBeanServer */
+	protected MBeanServer mbeanServer;
+	/** The JMXConnector for remote connections */
+	protected JMXConnector connector = null;
+	/** The JMXConnector's originating service URL */
+	protected JMXServiceURL serviceURL =  null;
+	/** The JMXConnector environment */
+	protected final Map<String, ?> environment = new HashMap<String, Object>();
+	/** The instance MetaClass */
+	protected MetaClass metaClass;
+	
+	/** The platform MBeanServer Default Domain Name */
+	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
+	
+	/**
+	 * Creates a new Gmx
+	 * @param mbeanServerConnection The wrapped MBeanServer connection
+	 */
+	private Gmx(MBeanServerConnection mbeanServerConnection) {
+		if(mbeanServerConnection==null) throw new IllegalArgumentException("The passed connection was null", new Throwable());
+		this.mbeanServerConnection = mbeanServerConnection;
+		if(this.mbeanServerConnection instanceof MBeanServer) {
+			this.mbeanServer = (MBeanServer)this.mbeanServerConnection;
+		} else {
+			this.mbeanServer = null;
+		}
+	}
+	
+	/**
+	 * Creates a new Gmx
+	 * @param serviceURL The remote JMXServiceURL
+	 */
+	private Gmx(JMXServiceURL serviceURL, Map<String, ?> environment)  {
+		if(serviceURL==null) throw new IllegalArgumentException("The passed serviceURL was null", new Throwable());		
+		this.serviceURL = serviceURL;
+		try {
+			this.connector = JMXConnectorFactory.connect(serviceURL);
+			this.mbeanServerConnection = connector.getMBeanServerConnection();
+			if(this.mbeanServerConnection instanceof MBeanServer) {
+				this.mbeanServer = (MBeanServer)this.mbeanServerConnection;
+			} else {
+				this.mbeanServer = null;
+			}			
+		} catch (IOException e) {
+			throw new RuntimeException("Failed to connect to remote MBeanServer on URL [" + serviceURL + "]");
+		}
+	}
+	
+	/**
+	 * Creates a new Gmx instance that wraps the local platform MBeanServer
+	 * @return a new local platform MBeanServer wrapping Gmx.
+	 */
+	public static Gmx newInstance() {
+		return new Gmx(ManagementFactory.getPlatformMBeanServer());
+	}
+
+	/**
+	 * Creates a new Gmx instance that wraps a local MBeanServer
+	 * @param defaultDomain The default domain name to get the MBeanServer for
+	 * @return a new local MBeanServer wrapping Gmx.
+	 */
+	public static Gmx newInstance(String defaultDomain) {
+		if(defaultDomain==null || PLATFORM_DEFAULT_DOMAIN.equals(defaultDomain)) {
+			return new Gmx(ManagementFactory.getPlatformMBeanServer());
+		}
+		for(MBeanServer server: MBeanServerFactory.findMBeanServer(null)) {
+			if(server.getDefaultDomain().equals(defaultDomain)) {
+				return new Gmx(server);
+			}
+		}
+		throw new IllegalArgumentException("No MBeanServer found for default domain name [" + defaultDomain + "]", new Throwable());
+	}
+	
+	/**
+	 * Creates a new remote Gmx
+	 * @param serviceURL The JMXServiceURL to create the Gmx from
+	 * @return a remote Gmx
+	 */
+	public static Gmx newInstance(JMXServiceURL serviceURL) {
+		return new Gmx(serviceURL, new HashMap<String, Object>(0));
+	}
+	
+	/**
+	 * Determines if this Gmx is remote
+	 * @return true if this Gmx is remote, false otherwise.
+	 */
+	public boolean isRemote() {
+		return connector!=null;
+	}
+	
+	// =========================================================================================
+	//	GroovyObject implementation
+	// =========================================================================================
+	
+	/**
+	 * {@inheritDoc}
+	 * @see groovy.lang.GroovyObject#getMetaClass()
+	 */
+	public MetaClass getMetaClass() {
+        if (metaClass == null) {
+            metaClass = GroovySystem.getMetaClassRegistry().getMetaClass(Gmx.class);
+        }
+        return metaClass;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see groovy.lang.GroovyObject#getProperty(java.lang.String)
+	 */
+	@Override
+	public Object getProperty(String propertyName) {
+		return getMetaClass().getProperty(this, propertyName);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see groovy.lang.GroovyObject#invokeMethod(java.lang.String, java.lang.Object)
+	 */
+	@Override
+	public Object invokeMethod(String name, Object args) {
+		return getMetaClass().invokeMethod(this, name, args);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see groovy.lang.GroovyObject#setMetaClass(groovy.lang.MetaClass)
+	 */
+	@Override
+	public void setMetaClass(MetaClass metaClass) {
+		this.metaClass = metaClass;
+		
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see groovy.lang.GroovyObject#setProperty(java.lang.String, java.lang.Object)
+	 */
+	@Override
+	public void setProperty(String propertyName, Object newValue) {
+		getMetaClass().setProperty(this, propertyName, newValue);		
+	}
+	
+	// =========================================================================================
+	//	MBeanServerConnection implementation
+	// =========================================================================================
+	
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#addNotificationListener(javax.management.ObjectName, javax.management.NotificationListener, javax.management.NotificationFilter, java.lang.Object)
+	 */
+	public void addNotificationListener(ObjectName name,
+			NotificationListener listener, NotificationFilter filter,
+			Object handback) throws InstanceNotFoundException, IOException {
+		mbeanServerConnection.addNotificationListener(name, listener, filter,
+				handback);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#addNotificationListener(javax.management.ObjectName, javax.management.ObjectName, javax.management.NotificationFilter, java.lang.Object)
+	 */
+	public void addNotificationListener(ObjectName name, ObjectName listener,
+			NotificationFilter filter, Object handback)
+			throws InstanceNotFoundException, IOException {
+		mbeanServerConnection.addNotificationListener(name, listener, filter,
+				handback);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#createMBean(java.lang.String, javax.management.ObjectName, java.lang.Object[], java.lang.String[])
+	 */
+	public ObjectInstance createMBean(String className, ObjectName name,
+			Object[] params, String[] signature) throws ReflectionException,
+			InstanceAlreadyExistsException, MBeanRegistrationException,
+			MBeanException, NotCompliantMBeanException, IOException {
+		return mbeanServerConnection.createMBean(className, name, params,
+				signature);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#createMBean(java.lang.String, javax.management.ObjectName, javax.management.ObjectName, java.lang.Object[], java.lang.String[])
+	 */
+	public ObjectInstance createMBean(String className, ObjectName name,
+			ObjectName loaderName, Object[] params, String[] signature)
+			throws ReflectionException, InstanceAlreadyExistsException,
+			MBeanRegistrationException, MBeanException,
+			NotCompliantMBeanException, InstanceNotFoundException, IOException {
+		return mbeanServerConnection.createMBean(className, name, loaderName,
+				params, signature);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#createMBean(java.lang.String, javax.management.ObjectName, javax.management.ObjectName)
+	 */
+	public ObjectInstance createMBean(String className, ObjectName name,
+			ObjectName loaderName) throws ReflectionException,
+			InstanceAlreadyExistsException, MBeanRegistrationException,
+			MBeanException, NotCompliantMBeanException,
+			InstanceNotFoundException, IOException {
+		return mbeanServerConnection.createMBean(className, name, loaderName);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#createMBean(java.lang.String, javax.management.ObjectName)
+	 */
+	public ObjectInstance createMBean(String className, ObjectName name)
+			throws ReflectionException, InstanceAlreadyExistsException,
+			MBeanRegistrationException, MBeanException,
+			NotCompliantMBeanException, IOException {
+		return mbeanServerConnection.createMBean(className, name);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getAttribute(javax.management.ObjectName, java.lang.String)
+	 */
+	public Object getAttribute(ObjectName name, String attribute)
+			throws MBeanException, AttributeNotFoundException,
+			InstanceNotFoundException, ReflectionException, IOException {
+		return mbeanServerConnection.getAttribute(name, attribute);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getAttributes(javax.management.ObjectName, java.lang.String[])
+	 */
+	public AttributeList getAttributes(ObjectName name, String[] attributes)
+			throws InstanceNotFoundException, ReflectionException, IOException {
+		return mbeanServerConnection.getAttributes(name, attributes);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getDefaultDomain()
+	 */
+	public String getDefaultDomain() throws IOException {
+		return mbeanServerConnection.getDefaultDomain();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getDomains()
+	 */
+	public String[] getDomains() throws IOException {
+		return mbeanServerConnection.getDomains();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getMBeanCount()
+	 */
+	public Integer getMBeanCount() throws IOException {
+		return mbeanServerConnection.getMBeanCount();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getMBeanInfo(javax.management.ObjectName)
+	 */
+	public MBeanInfo getMBeanInfo(ObjectName name)
+			throws InstanceNotFoundException, IntrospectionException,
+			ReflectionException, IOException {
+		return mbeanServerConnection.getMBeanInfo(name);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#getObjectInstance(javax.management.ObjectName)
+	 */
+	public ObjectInstance getObjectInstance(ObjectName name)
+			throws InstanceNotFoundException, IOException {
+		return mbeanServerConnection.getObjectInstance(name);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#invoke(javax.management.ObjectName, java.lang.String, java.lang.Object[], java.lang.String[])
+	 */
+	public Object invoke(ObjectName name, String operationName,
+			Object[] params, String[] signature)
+			throws InstanceNotFoundException, MBeanException,
+			ReflectionException, IOException {
+		return mbeanServerConnection.invoke(name, operationName, params,
+				signature);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#isInstanceOf(javax.management.ObjectName, java.lang.String)
+	 */
+	public boolean isInstanceOf(ObjectName name, String className)
+			throws InstanceNotFoundException, IOException {
+		return mbeanServerConnection.isInstanceOf(name, className);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#isRegistered(javax.management.ObjectName)
+	 */
+	public boolean isRegistered(ObjectName name) throws IOException {
+		return mbeanServerConnection.isRegistered(name);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#queryMBeans(javax.management.ObjectName, javax.management.QueryExp)
+	 */
+	public Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query)
+			throws IOException {
+		return mbeanServerConnection.queryMBeans(name, query);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#queryNames(javax.management.ObjectName, javax.management.QueryExp)
+	 */
+	public Set<ObjectName> queryNames(ObjectName name, QueryExp query)
+			throws IOException {
+		return mbeanServerConnection.queryNames(name, query);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#removeNotificationListener(javax.management.ObjectName, javax.management.NotificationListener, javax.management.NotificationFilter, java.lang.Object)
+	 */
+	public void removeNotificationListener(ObjectName name,
+			NotificationListener listener, NotificationFilter filter,
+			Object handback) throws InstanceNotFoundException,
+			ListenerNotFoundException, IOException {
+		mbeanServerConnection.removeNotificationListener(name, listener,
+				filter, handback);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#removeNotificationListener(javax.management.ObjectName, javax.management.NotificationListener)
+	 */
+	public void removeNotificationListener(ObjectName name,
+			NotificationListener listener) throws InstanceNotFoundException,
+			ListenerNotFoundException, IOException {
+		mbeanServerConnection.removeNotificationListener(name, listener);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#removeNotificationListener(javax.management.ObjectName, javax.management.ObjectName, javax.management.NotificationFilter, java.lang.Object)
+	 */
+	public void removeNotificationListener(ObjectName name,
+			ObjectName listener, NotificationFilter filter, Object handback)
+			throws InstanceNotFoundException, ListenerNotFoundException,
+			IOException {
+		mbeanServerConnection.removeNotificationListener(name, listener,
+				filter, handback);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#removeNotificationListener(javax.management.ObjectName, javax.management.ObjectName)
+	 */
+	public void removeNotificationListener(ObjectName name, ObjectName listener)
+			throws InstanceNotFoundException, ListenerNotFoundException,
+			IOException {
+		mbeanServerConnection.removeNotificationListener(name, listener);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#setAttribute(javax.management.ObjectName, javax.management.Attribute)
+	 */
+	public void setAttribute(ObjectName name, Attribute attribute)
+			throws InstanceNotFoundException, AttributeNotFoundException,
+			InvalidAttributeValueException, MBeanException,
+			ReflectionException, IOException {
+		mbeanServerConnection.setAttribute(name, attribute);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#setAttributes(javax.management.ObjectName, javax.management.AttributeList)
+	 */
+	public AttributeList setAttributes(ObjectName name, AttributeList attributes)
+			throws InstanceNotFoundException, ReflectionException, IOException {
+		return mbeanServerConnection.setAttributes(name, attributes);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanServerConnection#unregisterMBean(javax.management.ObjectName)
+	 */
+	public void unregisterMBean(ObjectName name)
+			throws InstanceNotFoundException, MBeanRegistrationException,
+			IOException {
+		mbeanServerConnection.unregisterMBean(name);
+	}
+	
+	// =========================================================================================
+	//	MBeanServer implementation
+	// =========================================================================================
+	
 
 }
