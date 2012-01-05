@@ -125,8 +125,6 @@ public class MetaMBean implements GroovyObject {
 					System.err.println("WARN: Overwriten Op:" + newOp);					
 				}
 				opSigs.add(newOp);		
-				System.out.println("OpSig Count:" + opSigs.size());
-				System.out.println("");
 			}			
 			
 		} catch (Exception e) {			
