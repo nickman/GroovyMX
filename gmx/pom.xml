@@ -54,6 +54,7 @@
 	<junit.version>4.8.2</junit.version>
 	<log4j.version>1.2.16</log4j.version>    
 	<groovy.version>1.8.5</groovy.version>
+	<jetty.version>8.0.3.v20111011</jetty.version>
   </properties>
 
   <dependencies>
@@ -75,6 +76,20 @@
 	  <artifactId>groovy-all</artifactId>
 	  <version>${groovy.version}</version>
 	</dependency>
+	
+	<dependency>
+	  <groupId>org.eclipse.jetty</groupId>
+	  <artifactId>jetty-server</artifactId>
+	  <version>${jetty.version}</version>
+	</dependency>
+	
+	<dependency>
+	  <groupId>org.eclipse.jetty</groupId>
+	  <artifactId>jetty-jmx</artifactId>
+	  <version>${jetty.version}</version>
+	</dependency>
+	
+	
     
   </dependencies>
 </project>
