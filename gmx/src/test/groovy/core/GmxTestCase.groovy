@@ -1,4 +1,5 @@
 import org.helios.gmx.*;
+import org.helios.gmx.util.*;
 import groovy.util.GroovyTestCase;
 import java.lang.management.*;
 import org.junit.*;
@@ -40,6 +41,19 @@ class GmxLocalTestCase extends GroovyTestCase {
     	def runtimeBean = gmx.mbean(ManagementFactory.RUNTIME_MXBEAN_NAME);
     	assert runtimeBean.Name == runtimeName;
     }
+    
+    void testGroovyLocalMetaMBeanCompositeAttribute() {
+    	def gmx = Gmx.newInstance();
+    	def on = gmx.mbean("java.lang:type=MemoryPool,name=*").objectName;
+    	assert on!=null;
+    	def initMem = ManagementFactory.getPlatformMBeanServer().getAttribute(on, "Usage").get("init");    	    	
+    	def initMem2 = -99;
+    	gmx.mbean(on, {
+    		initMem2 = it.Usage.init;
+    	});    	
+    	assert initMem2 == initMem;
+    }
+    
     
     void testGroovyLocalMetaMBeanOperation() {
     	long tId = Thread.currentThread().getId();
