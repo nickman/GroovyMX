@@ -36,6 +36,8 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.helios.gmx.util.FreePortFinder;
+
 /**
  * <p>Title: VirtualMachine</p>
  * <p>Description: Main wrapper class for reflective access to the Java Attach API</p> 

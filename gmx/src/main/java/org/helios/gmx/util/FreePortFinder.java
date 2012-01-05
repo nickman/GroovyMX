@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package org.helios.vm;
+package org.helios.gmx.util;
 
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * @version $LastChangedRevision$
- * <p><code>org.helios.vm.FreePortFinder</code></p>
+ * <p><code>org.helios.gmx.util.FreePortFinder</code></p>
  */
 public class FreePortFinder {
 	/** The starting range to look for ports */

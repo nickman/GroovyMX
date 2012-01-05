@@ -44,7 +44,7 @@ import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
 import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.eclipse.jetty.util.thread.ExecutorThreadPool;
-import org.helios.vm.FreePortFinder;
+import org.helios.gmx.util.FreePortFinder;
 
 
 
