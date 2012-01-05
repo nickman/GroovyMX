@@ -192,7 +192,7 @@ public class ReverseClassLoader extends AbstractHandler {
         OutputStream os = response.getOutputStream();
         os.write(classBytes);
         os.flush();        
-        log("Served Class [" + className + "] in [" + classBytes.length + "] Bytes" );
+        //log("Served Class [" + className + "] in [" + classBytes.length + "] Bytes" );
 	}
 	
 	protected void log(Object msg) {
