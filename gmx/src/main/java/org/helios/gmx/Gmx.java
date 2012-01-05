@@ -24,6 +24,7 @@
  */
 package org.helios.gmx;
 
+import groovy.lang.Closure;
 import groovy.lang.GroovyObject;
 import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
@@ -61,6 +62,8 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.helios.gmx.jmx.RuntimeMBeanServer;
+import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
 import org.helios.vm.VirtualMachine;
 import org.helios.vm.VirtualMachineBootstrap;
 
@@ -85,9 +88,9 @@ import org.helios.vm.VirtualMachineBootstrap;
 public class Gmx implements GroovyObject, MBeanServerConnection, NotificationListener {
 	
 	/** The wrapped MBeanServer connection */
-	protected MBeanServerConnection mbeanServerConnection;
+	protected RuntimeMBeanServerConnection mbeanServerConnection;
 	/** The wrapped MBeanServer populated if the connection is an MBeanServer */
-	protected MBeanServer mbeanServer;
+	protected RuntimeMBeanServer mbeanServer;
 	/** The JMXConnector for remote connections */
 	protected JMXConnector connector = null;
 	/** The JMXConnector's originating service URL */
@@ -109,9 +112,9 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	private Gmx(MBeanServerConnection mbeanServerConnection) {
 		if(mbeanServerConnection==null) throw new IllegalArgumentException("The passed connection was null", new Throwable());
-		this.mbeanServerConnection = mbeanServerConnection;
+		this.mbeanServerConnection = RuntimeMBeanServerConnection.getInstance(mbeanServerConnection);
 		if(this.mbeanServerConnection instanceof MBeanServer) {
-			this.mbeanServer = (MBeanServer)this.mbeanServerConnection;
+			this.mbeanServer = RuntimeMBeanServer.getInstance((MBeanServer)this.mbeanServerConnection);
 		} else {
 			this.mbeanServer = null;
 		}
@@ -126,11 +129,11 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		this.serviceURL = serviceURL;
 		try {
 			this.connector = JMXConnectorFactory.connect(serviceURL);
-			this.mbeanServerConnection = connector.getMBeanServerConnection();
+			this.mbeanServerConnection = RuntimeMBeanServerConnection.getInstance(connector.getMBeanServerConnection());
 			this.connectionId = connector.getConnectionId();
 			connector.addConnectionNotificationListener(this, null, this.connectionId);
 			if(this.mbeanServerConnection instanceof MBeanServer) {
-				this.mbeanServer = (MBeanServer)this.mbeanServerConnection;
+				this.mbeanServer = RuntimeMBeanServer.getInstance((MBeanServer)this.mbeanServerConnection);
 			} else {
 				this.mbeanServer = null;
 			}			
@@ -195,6 +198,17 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	// =========================================================================================
 	//	MetaMBean operations
 	// =========================================================================================
+	
+	/**
+	 * Queries the MBeanServer for MBeans with matching ObjectNames and executes the passed closure on each.
+	 * @param objectName The ObjectName to match against
+	 * @param beanHandler A closure which will operate on each returned {@link MetaMBean}
+	 */
+	public void beans(ObjectName objectName, Closure<MetaMBean> beanHandler) {
+		for(ObjectName on: mbeanServerConnection.queryNames(objectName, null)) {
+			MetaMBean.newInstance(on, mbeanServerConnection);
+		}
+	}
 	
 	/**
 	 * Returns a MetaMBean for the passed ObjectName registered in this MBeanServer
@@ -279,7 +293,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public void addNotificationListener(ObjectName name,
 			NotificationListener listener, NotificationFilter filter,
-			Object handback) throws InstanceNotFoundException, IOException {
+			Object handback) {
 		mbeanServerConnection.addNotificationListener(name, listener, filter,
 				handback);
 	}
