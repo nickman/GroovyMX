@@ -185,9 +185,18 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param serviceURL The JMXServiceURL to create the Gmx from
 	 * @return a remote Gmx
 	 */
-	public static Gmx newInstance(JMXServiceURL serviceURL) {
+	public static Gmx remote(JMXServiceURL serviceURL) {
 		return new Gmx(serviceURL, new HashMap<String, Object>(0));
 	}
+	
+	/**
+	 * Creates a new remote Gmx
+	 * @param serviceURL The JMXServiceURL to create the Gmx from
+	 * @return a remote Gmx
+	 */
+	public static Gmx remote(CharSequence serviceURL) {
+		return new Gmx(JMXHelper.serviceURL(serviceURL), new HashMap<String, Object>(0));
+	}	
 	
 	/**
 	 * Determines if this Gmx is remote
