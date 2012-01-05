@@ -27,12 +27,11 @@ package org.helios.gmx;
 import groovy.lang.GroovyObject;
 import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
-import groovy.util.ProxyGenerator;
 
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -48,8 +47,6 @@ import javax.management.MBeanInfo;
 import javax.management.MBeanOperationInfo;
 import javax.management.MBeanParameterInfo;
 import javax.management.ObjectName;
-import javax.management.openmbean.CompositeData;
-import javax.management.openmbean.TabularData;
 
 import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
 import org.helios.gmx.util.JMXHelper;
@@ -76,6 +73,11 @@ public class MetaMBean implements GroovyObject {
 	protected final Map<String, TreeSet<OperationSignature>> operations = new HashMap<String, TreeSet<OperationSignature>>();
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
+	/** The mbean server default domain */
+	protected String defaultDomain = null;
+	/** The mbean server jvm instance runtime name */
+	protected String jvmName = null;
+	
 	
 	
 	/**
@@ -129,7 +131,10 @@ public class MetaMBean implements GroovyObject {
 				}
 				opSigs.add(newOp);		
 			}			
-			
+			this.defaultDomain = connection.getDefaultDomain();
+			try {
+				this.jvmName = (String)connection.getAttribute(JMXHelper.objectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name");
+			} catch (Exception e) {}
 		} catch (Exception e) {			
 			throw new RuntimeException("Failed to acquire MBeanInfo for MBean [" + objectName + "]", e);
 		}	
@@ -437,6 +442,18 @@ public class MetaMBean implements GroovyObject {
 		public String getOpName() {
 			return opName;
 		}
+	}
+
+	/**
+	 * Constructs a <code>String</code> with key attributes in name = value format.
+	 * @return a <code>String</code> representation of this object.
+	 */
+	@Override
+	public String toString() {
+	    return new StringBuilder("[")
+	    	.append(objectName).append("]@")
+	    	.append(jvmName==null ? defaultDomain : jvmName)
+	    	.toString();
 	}
 
 }
