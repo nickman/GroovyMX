@@ -27,10 +27,12 @@ package org.helios.gmx;
 import groovy.lang.GroovyObject;
 import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
+import groovy.util.ProxyGenerator;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -45,8 +47,9 @@ import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanOperationInfo;
 import javax.management.MBeanParameterInfo;
-import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
+import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.TabularData;
 
 import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
 import org.helios.gmx.util.JMXHelper;
@@ -143,7 +146,7 @@ public class MetaMBean implements GroovyObject {
         }
         return metaClass;
 	}
-
+	
 	/**
 	 * {@inheritDoc}
 	 * @see groovy.lang.GroovyObject#getProperty(java.lang.String)
@@ -151,7 +154,7 @@ public class MetaMBean implements GroovyObject {
 	@Override
 	public Object getProperty(String propertyName) {
 		if(attributeNames.contains(propertyName)) {
-			return connection.getAttribute(objectName, propertyName);
+			return connection.getAttribute(objectName, propertyName);			
 		}
 		return getMetaClass().getProperty(this, propertyName);
 	}
