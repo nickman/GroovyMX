@@ -24,8 +24,13 @@
  */
 package org.helios.vm;
 
+import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
+import java.util.Enumeration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -43,6 +48,47 @@ public class FreePortFinder {
 	public static final int endRange = 65535;
 	/** The most recently attempted port test */
 	private static final AtomicInteger lastTested = new AtomicInteger(startRange-1);
+	
+	/**
+	 * Determines the best name or IP address to use as the default binding address
+	 * @return the current host name or ip address.
+	 */
+	public static synchronized String hostName() {
+		String rmiName = System.getProperty("java.rmi.server.hostname");
+		if(rmiName!=null) {
+			return rmiName;
+		}
+		
+		
+		
+		try {
+			for(Enumeration<NetworkInterface> nenum = NetworkInterface.getNetworkInterfaces(); nenum.hasMoreElements();) {
+				NetworkInterface nic = nenum.nextElement();
+				if(!nic.isLoopback() && nic.isUp()) {
+					for(InterfaceAddress addr: nic.getInterfaceAddresses()) {
+						InetAddress inetAddr = addr.getAddress();
+						if(inetAddr.isSiteLocalAddress()) {
+							if(inetAddr.getCanonicalHostName().equals(InetAddress.getLocalHost().getCanonicalHostName())) {
+								String hostName = inetAddr.getCanonicalHostName();
+								System.setProperty("java.rmi.server.hostname", hostName);
+								return hostName;
+							}
+						}						
+					}
+				}
+			}
+		} catch (Exception e) {}
+		String osName = System.getProperty("os.name").toLowerCase();
+		String hn = null;
+		if(osName.contains("windows")) {
+				hn = System.getenv("COMPUTERNAME");
+				if(hn!=null) return hn;
+		} else if(osName.contains("linux") || osName.contains("unix")) {
+				hn = System.getenv("HOSTNAME");
+				if(hn!=null) return hn;
+		}
+		return ManagementFactory.getRuntimeMXBean().getName().split("@")[1];
+	}
 	
 	
 	/**
