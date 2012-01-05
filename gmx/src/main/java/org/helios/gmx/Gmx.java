@@ -68,6 +68,7 @@ import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
 import org.helios.gmx.util.JMXHelper;
 import org.helios.vm.VirtualMachine;
 import org.helios.vm.VirtualMachineBootstrap;
+import org.helios.vm.VirtualMachineDescriptor;
 
 /**
  * <p>Title: Gmx</p>
@@ -111,6 +112,10 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	
 	/** The platform MBeanServer Default Domain Name */
 	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
+	
+	/** This JVM's PID */
+	public static final String PID = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+
 	
 	/**
 	 * Creates a new Gmx
@@ -210,6 +215,59 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public static Gmx remote(CharSequence serviceURL) {
 		return new Gmx(JMXHelper.serviceURL(serviceURL), new HashMap<String, Object>(0));
 	}	
+	
+	/**
+	 * Locates all JVMs on the local host using the attach API and invokes the passed closure on each.
+	 * Attach failures are silently ignored.
+	 * @param includeThis If true, includes this JVM (the one running this command)
+	 * @param gmxHandler The optional closure to execute on each Gmx created for each discovered JVM.
+	 * @return An array of Gmx instances created for each located and successfully attached JVM.
+	 */
+	public static Gmx[] attachInstances(boolean includeThis, Closure<Gmx> gmxHandler) {
+		Set<Gmx> set = new HashSet<Gmx>();
+		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
+			if(!vmd.id().equals(PID) || (vmd.id().equals(PID) && includeThis)) {
+				try {
+					Gmx gmx = Gmx.attachInstance(vmd.id());
+					set.add(Gmx.attachInstance(vmd.id()));
+					if(gmxHandler!=null) {
+						gmxHandler.call(gmx);
+					}
+				} catch (Exception e) {}
+			}
+		}
+		return set.toArray(new Gmx[set.size()]);
+	}
+	
+	/**
+	 * Locates all JVMs on the local host (not including this one) using the attach API and invokes the passed closure on each.
+	 * Attach failures are silently ignored.
+	 * @param gmxHandler The optional closure to execute on each Gmx created for each discovered JVM.
+	 * @return An array of Gmx instances created for each located and successfully attached JVM.
+	 */
+	public static Gmx[] attachInstances(Closure<Gmx> gmxHandler) {
+		return attachInstances(false, gmxHandler);
+	}
+	
+	/**
+	 * Locates all JVMs on the local host (not including this one) using the attach API and returns a Gmx for each.
+	 * Attach failures are silently ignored.
+	 * @return An array of Gmx instances created for each located and successfully attached JVM.
+	 */
+	public static Gmx[] attachInstances() {
+		return attachInstances(false, null);
+	}
+	
+	/**
+	 * Locates all JVMs on the local host using the attach API and returns a Gmx for each.
+	 * Attach failures are silently ignored.
+	 * @param includeThis If true, includes this JVM (the one running this command)
+	 * @return An array of Gmx instances created for each located and successfully attached JVM.
+	 */
+	public static Gmx[] attachInstances(boolean includeThis) {
+		return attachInstances(includeThis, null);
+	}
+	
 	
 	/**
 	 * Determines if this Gmx is remote

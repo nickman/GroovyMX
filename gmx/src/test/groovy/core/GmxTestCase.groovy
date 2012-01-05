@@ -95,6 +95,12 @@ class GmxLocalTestCase extends GroovyTestCase {
     	assert localDomain == gmx.serverDomain;
     }
     
+    void testAttachAll() {
+    	Gmx.attachInstances(true, {
+    		println it;
+    	});
+    }
+    
     
 }
 
