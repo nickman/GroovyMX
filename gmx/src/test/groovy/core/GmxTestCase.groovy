@@ -46,8 +46,20 @@ class GmxLocalTestCase extends GroovyTestCase {
     	def tInfo = ManagementFactory.getThreadMXBean().getThreadInfo(tId);
     	def gmx = Gmx.newInstance();
     	def threadingBean = gmx.mbean(ManagementFactory.THREAD_MXBEAN_NAME);
-    	ThreadInfo tInfo2 = ThreadInfo.from(threadingBean.getThreadInfo(tId));
+    	def tInfo2 = ThreadInfo.from(threadingBean.getThreadInfo(tId));
+    	assert tId == tInfo.getThreadId();
+    	assert tInfo.getThreadId() == tInfo2.getThreadId();
     }
+    
+    void testGroovyLocalMetaMBeanOperationWithArrayType() {
+    	long tId = Thread.currentThread().getId();
+    	def tInfo = ManagementFactory.getThreadMXBean().getThreadInfo(tId);
+    	def gmx = Gmx.newInstance();
+    	def threadingBean = gmx.mbean(ManagementFactory.THREAD_MXBEAN_NAME);
+    	def tInfo2 = ThreadInfo.from(threadingBean.getThreadInfo([tId] as long[])[0]);
+    	assert tInfo.getThreadId() == tInfo2.getThreadId();    	
+    }
+    
     
     void testGroovyAttachedLocalDomain()  {
     	def localDomain = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
