@@ -27,6 +27,7 @@ package org.helios.gmx.util;
 import java.util.Hashtable;
 
 import javax.management.ObjectName;
+import javax.management.remote.JMXServiceURL;
 
 /**
  * <p>Title: JMXHelper</p>
@@ -84,5 +85,19 @@ public class JMXHelper {
 		}
 	}
 	
+	
+	/**
+	 * Creates a new JMXServiceURL
+	 * @param serviceUrl The string form of the URL
+	 * @return a JMXServiceURL
+	 */
+	public static JMXServiceURL serviceURL(CharSequence serviceUrl) {
+		if(serviceUrl==null) throw new IllegalArgumentException("The passed serviceURL was null", new Throwable());
+		try {
+			return new JMXServiceURL(serviceUrl.toString());
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to create JMXServiceURL from string [" + serviceUrl + "]", e);
+		}
+	}
 	
 }
