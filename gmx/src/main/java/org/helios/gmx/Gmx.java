@@ -32,6 +32,7 @@ import groovy.lang.MetaClass;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -64,6 +65,7 @@ import javax.management.remote.JMXServiceURL;
 
 import org.helios.gmx.jmx.RuntimeMBeanServer;
 import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
+import org.helios.gmx.util.JMXHelper;
 import org.helios.vm.VirtualMachine;
 import org.helios.vm.VirtualMachineBootstrap;
 
@@ -203,30 +205,97 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * Queries the MBeanServer for MBeans with matching ObjectNames and executes the passed closure on each.
 	 * @param objectName The ObjectName to match against
 	 * @param beanHandler A closure which will operate on each returned {@link MetaMBean}
+	 * @return An array of matching {@link MetaMBean}s.
 	 */
-	public void beans(ObjectName objectName, Closure<MetaMBean> beanHandler) {
+	public MetaMBean[] mbeans(ObjectName objectName, Closure<MetaMBean> beanHandler) {
+		Set<MetaMBean> metaBeans = new HashSet<MetaMBean>();
 		for(ObjectName on: mbeanServerConnection.queryNames(objectName, null)) {
-			MetaMBean.newInstance(on, mbeanServerConnection);
+			MetaMBean bean = MetaMBean.newInstance(on, mbeanServerConnection);
+			metaBeans.add(bean);
+			if(beanHandler!=null) beanHandler.call(bean);
 		}
+		return metaBeans.toArray(new MetaMBean[metaBeans.size()]);
 	}
 	
 	/**
-	 * Returns a MetaMBean for the passed ObjectName registered in this MBeanServer
-	 * @param objectName The ObjectName of the MetaMBean 
-	 * @return a MetaMBean for the passed ObjectName
+	 * Queries the MBeanServer for MBeans with matching ObjectNames and executes the passed closure on the first instance found.
+	 * @param objectName The ObjectName to match against
+	 * @param beanHandler A closure which will operate on the first returned {@link MetaMBean}
+	 * @return The first matched {@link MetaMBean} or null if there was no match. 
+	 */
+	public MetaMBean mbean(ObjectName objectName, Closure<MetaMBean> beanHandler) {
+		Set<ObjectName> matches = mbeanServerConnection.queryNames(objectName, null);
+		if(matches.isEmpty()) return null;
+		MetaMBean bean = MetaMBean.newInstance(matches.iterator().next(), mbeanServerConnection);
+		if(beanHandler!=null) beanHandler.call(bean);
+		return bean;
+	}
+	
+	/**
+	 * Queries the MBeanServer for MBeans with matching ObjectNames and executes the passed closure on the first instance found.
+	 * @param objectName The ObjectName to match against
+	 * @param beanHandler A closure which will operate on the first returned {@link MetaMBean}
+	 * @return The first matched {@link MetaMBean} or null if there was no match. 
+	 */
+	public MetaMBean mbean(CharSequence objectName, Closure<MetaMBean> beanHandler) {
+		return mbean(JMXHelper.objectName(objectName), beanHandler);
+	}
+	
+	/**
+	 * Queries the MBeanServer for MBeans with matching ObjectNames and returns the first instance found.
+	 * @param objectName The ObjectName to match against
+	 * @return The first matched {@link MetaMBean} or null if there was no match. 
 	 */
 	public MetaMBean mbean(CharSequence objectName) {
-		return MetaMBean.newInstance(objectName, this.mbeanServerConnection);
+		return mbean(JMXHelper.objectName(objectName), null);
+	}
+	
+	
+	
+	/**
+	 * Queries the MBeanServer for MBeans with matching ObjectNames and returns the first instance found.
+	 * @param objectName The ObjectName to match against
+	 * @return The first matched {@link MetaMBean} or null if there was no match. 
+	 */
+	public MetaMBean mbean(ObjectName objectName) {
+		Set<ObjectName> matches = mbeanServerConnection.queryNames(objectName, null);
+		if(matches.isEmpty()) return null;
+		return MetaMBean.newInstance(matches.iterator().next(), mbeanServerConnection);
+	}
+
+	
+	
+	/**
+	 * Queries the MBeanServer for MBeans with matching ObjectNames
+	 * @param objectName The ObjectName to match against
+	 * @return An array of matching {@link MetaMBean}s.
+	 */
+	public MetaMBean[] mbeans(ObjectName objectName) {
+		return mbeans(objectName, null);
+	}
+	
+	
+	/**
+	 * Queries the MBeanServer for MBeans with matching ObjectNames and executes the passed closure on each.
+	 * @param objectName The ObjectName to match against
+	 * @param beanHandler A closure which will operate on each returned {@link MetaMBean}
+	 * @return An array of matching {@link MetaMBean}s.
+	 */
+	public MetaMBean[] mbeans(CharSequence objectName, Closure<MetaMBean> beanHandler) {
+		return mbeans(JMXHelper.objectName(objectName), beanHandler);
 	}
 	
 	/**
-	 * Returns a MetaMBean for the passed ObjectName registered in this MBeanServer
-	 * @param objectName The ObjectName of the MetaMBean 
-	 * @return a MetaMBean for the passed ObjectName
+	 * Queries the MBeanServer for MBeans with matching ObjectNames
+	 * @param objectName The ObjectName to match against
+	 * @return An array of matching {@link MetaMBean}s.
 	 */
-	public MetaMBean mbean(ObjectName objectName) {
-		return MetaMBean.newInstance(objectName, this.mbeanServerConnection);
+	public MetaMBean[] mbeans(CharSequence objectName) {
+		return mbeans(JMXHelper.objectName(objectName), null);
 	}
+	
+	
+
 	
 	
 	
