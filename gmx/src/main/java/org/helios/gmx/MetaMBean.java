@@ -30,7 +30,9 @@ import groovy.lang.MetaClass;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -118,8 +120,15 @@ public class MetaMBean implements GroovyObject {
 					opSigs = new TreeSet<OperationSignature>();
 					operations.put(minfo.getName(), opSigs);
 				}
-				opSigs.add(OperationSignature.newInstance(minfo));
+				OperationSignature newOp = OperationSignature.newInstance(minfo); 
+				if(opSigs.contains(newOp)) {
+					System.err.println("WARN: Overwriten Op:" + newOp);					
+				}
+				opSigs.add(newOp);		
+				System.out.println("OpSig Count:" + opSigs.size());
+				System.out.println("");
 			}			
+			
 		} catch (Exception e) {			
 			throw new RuntimeException("Failed to acquire MBeanInfo for MBean [" + objectName + "]", e);
 		}	
@@ -169,7 +178,7 @@ public class MetaMBean implements GroovyObject {
 	 */
 	@Override
 	public Object invokeMethod(String name, Object arg) {
-		TreeSet<OperationSignature> opSigs = operations.get(name);
+		
 		Object[] args = null;
 		if(arg.getClass().isArray()) {
 			int length = Array.getLength(arg);
@@ -178,41 +187,101 @@ public class MetaMBean implements GroovyObject {
 		} else {
 			args = new Object[]{arg};
 		}
-		if(opSigs!=null) {
+		Set<OperationSignature> opSigs = getOpSigs(name, args.length);
+		
+		if(!opSigs.isEmpty()) {
 			if(opSigs.size()==1) {
 				try {
 					return connection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
 				} catch (Exception e) {
 					throw new RuntimeException("Failed to invoke operation [" + name + "]", e);
 				}
-			} else {
-				Iterator<OperationSignature> opSigIter = opSigs.iterator();
-				boolean argCountOverload = false;
-				for(; opSigIter.hasNext();) {
-					OperationSignature os = opSigIter.next();
-					if(os.getSignature().length==args.length) {
-						if(!opSigIter.hasNext() || opSigIter.next().getSignature().length!=args.length) {
-							try {
-								return connection.invoke(objectName, name, args, os.getStrSignature());
-							} catch (Exception e) {
-								throw new RuntimeException("Failed to invoke operation [" + name + "]", e);
-							}													
-						} else {
-							argCountOverload = true;
-							break;
-						}
-					}					
-				}
-				if(argCountOverload) {
-					throw new UnsupportedOperationException("Overloaded MBean Operations Not Supported Yet. (Coming Soon)", new Throwable());
-				} else {
-					return getMetaClass().invokeMethod(this, name, args);
-				}								
 			}
-		} else {
-			return getMetaClass().invokeMethod(this, name, args);
+			// Attempt to match one of the overloads
+			OperationSignature os = matchOpSig(opSigs.toArray(new OperationSignature[opSigs.size()]), args);
+			try {
+				return connection.invoke(objectName, name, args, os.getStrSignature());
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to invoke operation [" + name + "]", e);
+			}													
+		}
+		return getMetaClass().invokeMethod(this, name, args);		
+	}
+	
+	/**
+	 * Attempts to match the passed argument array against one of the OperationSignatures in the passed OperationSignature array 
+	 * @param opSigs An array of OperationSignatures that have the same number of arguments
+	 * @param args The array of arguments to find a matching OperationSignature for
+	 * @return A matching OperationSignature or null if one was not found. If more than one match, a RuntimeException will be thrown.
+	 */
+	protected OperationSignature matchOpSig(OperationSignature[] opSigs, Object...args) {
+		Set<OperationSignature> matches = new HashSet<OperationSignature>();
+		Class<?>[] signature = argsToSignagture(args);
+		for(OperationSignature os: opSigs) {
+			Class<?>[] opSig = os.getSignature();
+			boolean match = true;
+			for(int i = 0; i < signature.length; i++) {
+				Class<?> opType = opSig[i];
+				Class<?> argType = signature[i];
+				if(argType==null) continue;
+				if(opType.equals(UnknownClass.class)) continue;
+				if(opType.isAssignableFrom(argType)) continue;
+				if(Primitive.isValidAssignment(opType, argType)) continue;
+				if((opType.isArray() && !argType.isArray()) || (!opType.isArray() && argType.isArray())) {
+					match = false;
+					break;
+				}
+				if(opType.isArray() && argType.isArray()) {
+					if(Array.getLength(opType) != Array.getLength(argType)) {
+						match = false;
+						break;
+					}
+					if(opType.getComponentType().isAssignableFrom(argType.getComponentType())) continue;
+					if(Primitive.isValidAssignment(opType.getComponentType(), argType.getComponentType())) continue;
+				}
+				
+			}
+			if(match) matches.add(os);
+
 		}
 		
+		if(matches.isEmpty() || matches.size()>1) throw new RuntimeException("Matched multiple OperationSignatures for the passed argument array:" + matches.toString(), new Throwable());
+		return matches.iterator().next();
+		
+	}
+	
+	/**
+	 * Generates an array of classes from an array of objects.
+	 * @param args The object array
+	 * @return an array of classes
+	 */
+	protected Class<?>[] argsToSignagture(Object...args) {
+		Class<?>[] signature = new Class[args.length];
+		for(int i = 0; i < args.length; i++) {
+			signature[i] = args[i]==null ? null : args[i].getClass();
+		}
+		return signature;
+	}
+	
+	/**
+	 * Finds all operation signatures with an operation name matching the passed name and having the same number of arguments
+	 * @param name The op name
+	 * @param argCount The argument count
+	 * @return a [possibly empty] set of matching operation signatures
+	 */
+	protected Set<OperationSignature> getOpSigs(String name, int argCount) {
+		Set<OperationSignature> set = new HashSet<OperationSignature>();
+		TreeSet<OperationSignature> opSigs = operations.get(name);
+		for(OperationSignature os: opSigs) {
+			if(os.getArgCount()==argCount) {
+				set.add(os);
+			} else {
+				if(os.getArgCount()>argCount) {
+					break;
+				}
+			}
+		}
+		return set;
 	}
 
 	/**
@@ -238,9 +307,9 @@ public class MetaMBean implements GroovyObject {
 	}
 	
 	/**
-	 * Retrieves the named attribute
+	 * Sets the named attribute
 	 * @param name The attribute name
-	 * @return The attribute value
+	 * @param value The attribute value
 	 */
 	protected void _setAttribute(String name, Object value) {
 		try {
@@ -275,9 +344,9 @@ public class MetaMBean implements GroovyObject {
 		protected final Class<?>[] signature;
 		/** The classes represented in the sgnature */
 		protected final String[] strSignature;
+		/** The op name */
+		protected final String opName;
 		
-		/** The hash code of this instance */
-		protected final int hashCode;
 		
 		/**
 		 * Creates a new OperationSignature
@@ -286,22 +355,30 @@ public class MetaMBean implements GroovyObject {
 		 */
 		public static OperationSignature newInstance(MBeanOperationInfo info) {
 			if(info==null) throw new IllegalArgumentException("The passed info was null", new Throwable());
-			return new OperationSignature(info.getSignature());
+			return new OperationSignature(info.getName(), info.getSignature());
+		}
+		
+		/**
+		 * Returns the number of operation parameters
+		 * @return the number of operation parameters
+		 */
+		public int getArgCount() {
+			return strSignature.length;
 		}
 		
 		/**
 		 * Creates a new OperationSignature
+		 * @param opName The operation name
 		 * @param infos An array of the MBean operation info signatures
 		 */
-		private OperationSignature(MBeanParameterInfo...infos) {			
+		private OperationSignature(String opName, MBeanParameterInfo...infos) {	
+			this.opName = opName;
 			List<Class<?>> sig = new ArrayList<Class<?>>(infos==null ? 0 : infos.length);	
 			List<String> strSig = new ArrayList<String>(infos==null ? 0 : infos.length);
-			StringBuilder b = new StringBuilder(getClass().getName());
 			if(infos!=null) {
 				for(MBeanParameterInfo pinfo: infos) {
 					String className = pinfo.getType();
-					strSig.add(className);
-					b.append(className);
+					strSig.add(className);					
 					if(Primitive.isPrimitiveName(className)) {
 						sig.add(Primitive.getPrimitive(className).getPclazz());
 					} else {
@@ -317,28 +394,25 @@ public class MetaMBean implements GroovyObject {
 			}
 			signature = sig.toArray(new Class[sig.size()]);
 			strSignature = strSig.toArray(new String[strSig.size()]);
-			hashCode = b.toString().hashCode();
 		}
 		
 		/**
 		 * {@inheritDoc}
 		 * @see java.lang.Object#hashCode()
 		 */
+		@Override
 		public int hashCode() {
-			return hashCode;
+			return Arrays.hashCode(strSignature);
 		}
 		
 		/**
 		 * {@inheritDoc}
 		 * @see java.lang.Object#equals(java.lang.Object)
 		 */
-		public boolean equals(Object obj) {
-			if(obj==null) return false;
-			if(obj instanceof OperationSignature) {
-				return hashCode==obj.hashCode();
-			} else {
-				return false;
-			}
+		@Override
+		public boolean equals(Object obj) {			
+			if(obj instanceof OperationSignature) return Arrays.deepEquals(strSignature, ((OperationSignature)obj).strSignature);
+			return false;			
 		}
 
 		/**
@@ -365,7 +439,33 @@ public class MetaMBean implements GroovyObject {
 		public int compareTo(OperationSignature os) {
 			Integer thisArgCount = signature.length;
 			Integer thatArgCount = os.signature.length;
-			return thisArgCount.compareTo(thatArgCount);
+			if(thisArgCount.intValue()==thatArgCount.intValue()) {
+				return (this.hashCode()<os.hashCode() ? -1 : (this.hashCode()==os.hashCode() ? 0 : 1));
+			}
+			return (thisArgCount<thatArgCount ? -1 : (thisArgCount==thatArgCount ? 0 : 1));
+		}
+
+		/**
+		 * Constructs a <code>String</code> with key attributes in name = value format.
+		 * @return a <code>String</code> representation of this object.
+		 */
+		@Override
+		public String toString() {
+		    final String TAB = "\n\t";
+		    StringBuilder retValue = new StringBuilder("OperationSignature [")
+		    	.append(TAB).append("Name = ").append(opName)
+		    	.append(TAB).append("Arg Count = ").append(signature.length)
+		        .append(TAB).append("strSignature = ").append(Arrays.toString(this.strSignature))
+		        .append(TAB).append("hashCode = ").append(this.hashCode())
+		        .append("\n]");    
+		    return retValue.toString();
+		}
+
+		/**
+		 * @return the opName
+		 */
+		public String getOpName() {
+			return opName;
 		}
 	}
 
