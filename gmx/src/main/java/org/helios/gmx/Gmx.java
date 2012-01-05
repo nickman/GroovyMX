@@ -101,6 +101,10 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	protected final Map<String, ?> environment = new HashMap<String, Object>();
 	/** The JMXConnector's connection Id */
 	protected String connectionId = null;
+	/** The mbean server default domain */
+	protected String serverDomain = null;
+	/** The mbean server jvm instance runtime name */
+	protected String jvmName = null;
 	
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
@@ -120,6 +124,10 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		} else {
 			this.mbeanServer = null;
 		}
+		serverDomain = this.mbeanServerConnection.getDefaultDomain();
+		try {
+			this.jvmName = (String)this.mbeanServerConnection.getAttribute(JMXHelper.objectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name");
+		} catch (Exception e) {}		
 	}
 	
 	/**
@@ -142,6 +150,11 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		} catch (IOException e) {
 			throw new RuntimeException("Failed to connect to remote MBeanServer on URL [" + serviceURL + "]");
 		}
+		serverDomain = this.mbeanServerConnection.getDefaultDomain();
+		try {
+			this.jvmName = (String)this.mbeanServerConnection.getAttribute(JMXHelper.objectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name");
+		} catch (Exception e) {}		
+		
 	}
 	
 	/**
@@ -219,7 +232,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public MetaMBean[] mbeans(ObjectName objectName, Closure<MetaMBean> beanHandler) {
 		Set<MetaMBean> metaBeans = new HashSet<MetaMBean>();
 		for(ObjectName on: mbeanServerConnection.queryNames(objectName, null)) {
-			MetaMBean bean = MetaMBean.newInstance(on, mbeanServerConnection);
+			MetaMBean bean = MetaMBean.newInstance(on, this);
 			metaBeans.add(bean);
 			if(beanHandler!=null) beanHandler.call(bean);
 		}
@@ -235,7 +248,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public MetaMBean mbean(ObjectName objectName, Closure<MetaMBean> beanHandler) {
 		Set<ObjectName> matches = mbeanServerConnection.queryNames(objectName, null);
 		if(matches.isEmpty()) return null;
-		MetaMBean bean = MetaMBean.newInstance(matches.iterator().next(), mbeanServerConnection);
+		MetaMBean bean = MetaMBean.newInstance(matches.iterator().next(), this);
 		if(beanHandler!=null) beanHandler.call(bean);
 		return bean;
 	}
@@ -269,7 +282,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public MetaMBean mbean(ObjectName objectName) {
 		Set<ObjectName> matches = mbeanServerConnection.queryNames(objectName, null);
 		if(matches.isEmpty()) return null;
-		return MetaMBean.newInstance(matches.iterator().next(), mbeanServerConnection);
+		return MetaMBean.newInstance(matches.iterator().next(), this);
 	}
 
 	
@@ -676,6 +689,85 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 				onConnectionLostNotifications(connNot);
 			}
 		}
+	}
+
+	/**
+	 * Returns the internal MBeanServer reference
+	 * @return the internal MBeanServer reference which may be null if this is a remote
+	 * connection and has not been server remoted. 
+	 */
+	public RuntimeMBeanServer getMBeanServer() {
+		return mbeanServer;
+	}
+
+	/**
+	 * The remote JMX connection
+	 * @return the remote JMX connection which may be null if this is not a remote connection
+	 */
+	public JMXConnector getConnector() {
+		return connector;
+	}
+
+	/**
+	 * The remote JMX connection JMX Service URL
+	 * @return the remote JMX connection JMX Service URL which may be null if this is not a remote connection
+	 */
+	public JMXServiceURL getServiceURL() {
+		return serviceURL;
+	}
+
+	/**
+	 * Returns the configured environment for this connection
+	 * @return the configured environment for this connection which may be empty 
+	 * because no environment was set or because this is not a remote connection.
+	 */
+	public Map<String, ?> getEnvironment() {
+		return environment;
+	}
+
+	/**
+	 * Returns the remote connection Id
+	 * @return the remote connection Id which may be null if this is not a remote connection
+	 */
+	public String getConnectionId() {
+		return connectionId;
+	}
+
+	/**
+	 * Returns the MBeanServer default domain.
+	 * This value is cached so this is a more efficient call than {@link Gmx#getDefaultDomain()}.
+	 * @return the MBeanServer default domain.
+	 */
+	public String getServerDomain() {
+		return serverDomain;
+	}
+
+	/**
+	 * Returns the JVM Runtime name for the connected JVM
+	 * If the connected MBeanServer does not have the {@link java.lang.management.RuntimeMXBean} registered, this will be null.
+	 * @return the JVM Runtime name for the connected JVM
+	 */
+	public String getJvmName() {
+		return jvmName;
+	}
+
+	/**
+	 * Constructs a <code>String</code> with key attributes in name = value format.
+	 * @return a <code>String</code> representation of this object.
+	 */
+	@Override
+	public String toString() {
+	    final String TAB = "\n\t";
+	    StringBuilder retValue = new StringBuilder("Gmx [")
+	    	.append(TAB).append("DefaultDomain = ").append(this.serverDomain)
+	    	.append(TAB).append("JvmName = ").append(this.jvmName)
+	    	.append(TAB).append("Remote = ").append(this.isRemote());
+	    	if(isRemote()) {
+	    		retValue.append(TAB).append("serviceURL = ").append(this.serviceURL)
+	    		.append(TAB).append("connectionId = ").append(this.connectionId);
+	    	}
+	        retValue.append("\n]");    
+	    return retValue.toString();
 	}
 
 }

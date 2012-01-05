@@ -32,18 +32,21 @@ class GmxLocalTestCase extends GroovyTestCase {
     void testGroovyLocalDomain()  {
     	def localDomain = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
     	def gmx = Gmx.newInstance();
+    	println gmx;
     	assert gmx.defaultDomain == localDomain;        
     }
     
     void testGroovyLocalMetaMBeanAttribute() {
     	def runtimeName = ManagementFactory.getRuntimeMXBean().getName();
     	def gmx = Gmx.newInstance();
+    	println gmx;
     	def runtimeBean = gmx.mbean(ManagementFactory.RUNTIME_MXBEAN_NAME);
     	assert runtimeBean.Name == runtimeName;
     }
     
     void testGroovyLocalMetaMBeanCompositeAttribute() {
     	def gmx = Gmx.newInstance();
+    	println gmx;
     	def on = gmx.mbean("java.lang:type=MemoryPool,name=*").objectName;
     	assert on!=null;
     	def initMem = ManagementFactory.getPlatformMBeanServer().getAttribute(on, "Usage").get("init");    	    	
@@ -59,6 +62,7 @@ class GmxLocalTestCase extends GroovyTestCase {
     	long tId = Thread.currentThread().getId();
     	def tInfo = ManagementFactory.getThreadMXBean().getThreadInfo(tId);
     	def gmx = Gmx.newInstance();
+    	println gmx;
     	def threadingBean = gmx.mbean(ManagementFactory.THREAD_MXBEAN_NAME);
     	def tInfo2 = ThreadInfo.from(threadingBean.getThreadInfo(tId));
     	assert tId == tInfo.getThreadId();
@@ -69,6 +73,7 @@ class GmxLocalTestCase extends GroovyTestCase {
     	long tId = Thread.currentThread().getId();
     	def tInfo = ManagementFactory.getThreadMXBean().getThreadInfo(tId);
     	def gmx = Gmx.newInstance();
+    	println gmx;
     	def threadingBean = gmx.mbean(ManagementFactory.THREAD_MXBEAN_NAME);
     	def tInfo2 = ThreadInfo.from(threadingBean.getThreadInfo([tId] as long[])[0]);
     	assert tInfo.getThreadId() == tInfo2.getThreadId();    	
@@ -78,9 +83,17 @@ class GmxLocalTestCase extends GroovyTestCase {
     void testGroovyAttachedLocalDomain()  {
     	def localDomain = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
     	def gmx = Gmx.attachInstance(pid);
+    	println gmx;
     	assert gmx.defaultDomain == localDomain;        
     }
     
+    
+    void testAttachedLocalDomain()  {
+    	def localDomain = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();    	
+    	Gmx gmx = Gmx.attachInstance(pid);
+    	assert localDomain == gmx.defaultDomain;
+    	assert localDomain == gmx.serverDomain;
+    }
     
     
 }

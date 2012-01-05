@@ -63,8 +63,8 @@ public class MetaMBean implements GroovyObject {
 	
 	/** The JMX ObjectName of the MBean */
 	protected final ObjectName objectName;
-	/** The connection to the MBeanServer where the MBean is registered */
-	protected final RuntimeMBeanServerConnection connection;
+	/** The Gmx reference that created this MetaMBean */
+	protected final Gmx gmx;
 	/** A reference to the MBean's MBeanInfo */
 	protected final AtomicReference<MBeanInfo> mbeanInfo = new AtomicReference<MBeanInfo>(null);
 	/** A set of attribute names */
@@ -73,33 +73,28 @@ public class MetaMBean implements GroovyObject {
 	protected final Map<String, TreeSet<OperationSignature>> operations = new HashMap<String, TreeSet<OperationSignature>>();
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
-	/** The mbean server default domain */
-	protected String defaultDomain = null;
-	/** The mbean server jvm instance runtime name */
-	protected String jvmName = null;
 	
 	
 	
 	/**
 	 * Creates a new MetaMBean
 	 * @param objectName The JMX ObjectName
-	 * @param connection The JMX MBeanServerConnection
+	 * @param gmx The Gmx instance that created this MetaMBean 
 	 * @return a MetaMBean
 	 */
-	public static MetaMBean newInstance(ObjectName objectName, RuntimeMBeanServerConnection connection) {
-		if(objectName==null) throw new IllegalArgumentException("The passed ObjectName was null", new Throwable());
-		if(connection==null) throw new IllegalArgumentException("The passed MBeanServerConnection was null", new Throwable());
-		return new MetaMBean(objectName, connection);
+	public static MetaMBean newInstance(ObjectName objectName, Gmx gmx) {
+		if(objectName==null) throw new IllegalArgumentException("The passed ObjectName was null", new Throwable());		
+		return new MetaMBean(objectName, gmx);
 	}
 	
 	/**
 	 * Creates a new MetaMBean
 	 * @param objectName The JMX ObjectName
-	 * @param connection The JMX MBeanServerConnection
+	 * @param gmx The Gmx instance that created this MetaMBean
 	 * @return a MetaMBean
 	 */
-	public static MetaMBean newInstance(CharSequence objectName, RuntimeMBeanServerConnection connection) {
-		return newInstance(JMXHelper.objectName(objectName), connection);
+	public static MetaMBean newInstance(CharSequence objectName, Gmx gmx) {
+		return newInstance(JMXHelper.objectName(objectName), gmx);
 	}
 	
 	
@@ -107,13 +102,13 @@ public class MetaMBean implements GroovyObject {
 	/**
 	 * Creates a new MetaMBean
 	 * @param objectName The JMX ObjectName of the MBean
-	 * @param connection The connection to the MBeanServer where the MBean is registered
+	 * @param gmx The Gmx instance that created this MetaMBean
 	 */
-	private MetaMBean(ObjectName objectName, RuntimeMBeanServerConnection connection) {
+	private MetaMBean(ObjectName objectName, Gmx gmx) {
 		this.objectName = objectName;
-		this.connection = connection;
+		this.gmx = gmx;
 		try {
-			mbeanInfo.set(this.connection.getMBeanInfo(objectName));
+			mbeanInfo.set(gmx.mbeanServerConnection.getMBeanInfo(objectName));
 			for(MBeanAttributeInfo minfo: mbeanInfo.get().getAttributes()) {
 				if(minfo.isReadable()) {
 					attributeNames.add(minfo.getName());
@@ -131,10 +126,6 @@ public class MetaMBean implements GroovyObject {
 				}
 				opSigs.add(newOp);		
 			}			
-			this.defaultDomain = connection.getDefaultDomain();
-			try {
-				this.jvmName = (String)connection.getAttribute(JMXHelper.objectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name");
-			} catch (Exception e) {}
 		} catch (Exception e) {			
 			throw new RuntimeException("Failed to acquire MBeanInfo for MBean [" + objectName + "]", e);
 		}	
@@ -159,7 +150,7 @@ public class MetaMBean implements GroovyObject {
 	@Override
 	public Object getProperty(String propertyName) {
 		if(attributeNames.contains(propertyName)) {
-			return connection.getAttribute(objectName, propertyName);			
+			return gmx.mbeanServerConnection.getAttribute(objectName, propertyName);			
 		}
 		return getMetaClass().getProperty(this, propertyName);
 	}
@@ -185,11 +176,11 @@ public class MetaMBean implements GroovyObject {
 		
 		if(!opSigs.isEmpty()) {
 			if(opSigs.size()==1) {
-				return connection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
+				return gmx.mbeanServerConnection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
 			}
 			// Attempt to match one of the overloads
 			OperationSignature os = matchOpSig(opSigs.toArray(new OperationSignature[opSigs.size()]), args);
-			return connection.invoke(objectName, name, args, os.getStrSignature());
+			return gmx.mbeanServerConnection.invoke(objectName, name, args, os.getStrSignature());
 		}
 		return getMetaClass().invokeMethod(this, name, args);		
 	}
@@ -287,7 +278,7 @@ public class MetaMBean implements GroovyObject {
 	@Override
 	public void setProperty(String propertyName, Object newValue) {
 		if(attributeNames.contains(propertyName)) {
-			connection.setAttribute(objectName, new Attribute(propertyName, newValue));
+			gmx.mbeanServerConnection.setAttribute(objectName, new Attribute(propertyName, newValue));
 		}
 		getMetaClass().setProperty(this, propertyName, newValue);
 	}
@@ -452,7 +443,7 @@ public class MetaMBean implements GroovyObject {
 	public String toString() {
 	    return new StringBuilder("[")
 	    	.append(objectName).append("]@")
-	    	.append(jvmName==null ? defaultDomain : jvmName)
+	    	.append(gmx.jvmName==null ? gmx.serverDomain : gmx.jvmName)
 	    	.toString();
 	}
 
