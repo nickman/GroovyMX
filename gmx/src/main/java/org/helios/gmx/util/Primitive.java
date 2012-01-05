@@ -36,14 +36,23 @@ import java.util.Map;
  */
 
 public enum Primitive {
+	/** Primitive descriptor for Byte */
 	BYTE(Byte.class, byte.class),
+	/** Primitive descriptor for Boolean */
 	BOOLEAN(Boolean.class, boolean.class),
+	/** Primitive descriptor for Short */
 	SHORT(Short.class, short.class),
+	/** Primitive descriptor for Integer */
 	INT(Integer.class, int.class),
+	/** Primitive descriptor for Character */
 	CHAR(Character.class, char.class),
+	/** Primitive descriptor for Long */
 	LONG(Long.class, long.class),
+	/** Primitive descriptor for Float */
 	FLOAT(Float.class, float.class),
+	/** Primitive descriptor for Double */
 	DOUBLE(Double.class, double.class),
+	/** Primitive descriptor for Void */
 	VOID(Void.class, void.class);
 	
 	/** The number of entries in the enum */
@@ -64,6 +73,26 @@ public enum Primitive {
 			UNAME_TO_P.put(p.uclazz.getName(), p);
 			UCLASS_TO_P.put(p.uclazz, p);
 		}
+	}
+	
+	/**
+	 * Determines assignment compatibility for the passed types
+	 * @param to The assignment to class
+	 * @param from The assignment from class
+	 * @return true if {@code from} and be assigned to {@code to}, false otherwise.
+	 */
+	public static boolean isValidAssignment(Class<?> to, Class<?> from) {
+		if(to==null || from==null) return false;
+		Primitive toP = PCLASS_TO_P.get(to);
+		Primitive fromP = PCLASS_TO_P.get(from);
+		if(toP==null && fromP==null) {
+			return to.isAssignableFrom(from);
+		}
+		if(toP==null || fromP==null) {
+			return false;
+		}
+		return toP.equals(fromP);
+		
 	}
 	
 	/**
