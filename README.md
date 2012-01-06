@@ -22,4 +22,4 @@ The output of the script is:
     java.lang:type=MemoryPool,name=PS Old Gen:	268435456
 
 
-[1]: https://github.com/nickman/GroovyMX/blob/master/content/img/gmx-320-X-320.png?raw=true "Helios"
+[1]: https://github.com/nickman/GroovyMX/blob/master/content/img/gmx-160-X-160.png?raw=true "Helios"
