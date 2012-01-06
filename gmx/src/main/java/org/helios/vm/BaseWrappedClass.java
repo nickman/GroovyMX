@@ -61,7 +61,9 @@ public abstract class BaseWrappedClass {
 	public static void pushCl() {
 		if(savedState.get()==null) {
 			savedState.set(Thread.currentThread().getContextClassLoader());
-			Thread.currentThread().setContextClassLoader(VirtualMachineBootstrap.attachClassLoader.get());
+			ClassLoader cl = VirtualMachineBootstrap.attachClassLoader.get();
+			Thread.currentThread().setContextClassLoader(cl==null ? ClassLoader.getSystemClassLoader() : cl);
+			//log("Pushed ClassLoader [" + Thread.currentThread().getContextClassLoader() + "]");
 		}
 	}
 	

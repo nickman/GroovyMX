@@ -99,6 +99,7 @@ public class VirtualMachineBootstrap {
 					try {
 						AttachProvider.init();
 					} catch (Exception e) {
+						e.printStackTrace(System.err);
 						throw new RuntimeException("Failed to load Attach API Class. (If you are running a JRE, you need to use a JDK with a tools.jar", e);
 					}
 				}
@@ -122,6 +123,7 @@ public class VirtualMachineBootstrap {
 			BaseWrappedClass.getMethodMapping(classCache.get(VM_DESC_CLASS));
 			BaseWrappedClass.getMethodMapping(classCache.get(ATTACH_PROVIDER_CLASS));
 		} catch (Exception e) {
+			e.printStackTrace(System.err);
 			throw new RuntimeException("Failed to load Attach API Class. (If you are running a JRE, you need to use a JDK with a tools.jar", e);
 		}		
 	}
@@ -176,8 +178,20 @@ public class VirtualMachineBootstrap {
 	 * Searches for the Attach API jar
 	 * @param urlLocation An optional override fully qualified URL of the attach jar
 	 */
-	protected static void findAttachAPI(String urlLocation) {		
-		if(inClassPath()) return;
+	protected static void findAttachAPI(String urlLocation) {			
+		//if(inClassPath()) return;
+		try {
+			Class<?> clazz = Class.forName(VM_CLASS);
+			log("Found AttachAPI in Standard ClassPath [" + clazz.getClassLoader() + "]");
+			ClassLoader cl = clazz.getClassLoader();
+			if(cl==null) {
+				cl = ClassLoader.getSystemClassLoader();
+			}
+			log("Attach API ClassLoader:" + cl);
+			attachClassLoader.set(cl);
+			BaseWrappedClass.savedState.set(null);
+			return;
+		} catch (Exception e) {}
 		List<String> altLocs = new ArrayList<String>();
 		if(urlLocation!=null) {
 			altLocs.add(urlLocation);
@@ -191,9 +205,11 @@ public class VirtualMachineBootstrap {
 				//log("Testing [" + toolsLoc + "]");
 				if(toolsLoc.exists()) {
 					URL url = toolsLoc.toURI().toURL();
-					URLClassLoader ucl = new URLClassLoader(new URL[]{url}, ClassLoader.getSystemClassLoader());
+					URLClassLoader ucl = new URLClassLoader(new URL[]{url}, ClassLoader.getSystemClassLoader().getParent());
 					if(inClassPath(ucl)) {
-						//log("Attach API Found And Loaded [" + toolsLoc + "]");						
+						//log("Attach API Found And Loaded [" + toolsLoc + "]");	
+//						attachClassLoader.set(ucl);
+//						BaseWrappedClass.savedState.set(null);						
 						return;
 					}
 				}
@@ -201,7 +217,7 @@ public class VirtualMachineBootstrap {
 			}
 		}	
 		if(attachClassLoader.get()==null) {
-			throw new RuntimeException("Failed to find the Atach API. Please add tools.jar to the classpath");
+			throw new RuntimeException("Failed to find the Atach API. Please add tools.jar to the classpath", new Throwable());
 		}
 	}
 	

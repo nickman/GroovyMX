@@ -161,8 +161,10 @@ public class AttachProvider extends BaseWrappedClass {
 	 * Initializes the list of know attach providers
 	 */
 	static void init() {
+		VirtualMachineBootstrap.findAttachAPI();
 		try {
-			pushCl();
+			pushCl();			
+			log("Loading Attach Provider with [" + Thread.currentThread().getContextClassLoader() + "]");
 			Class<?> clazz = Thread.currentThread().getContextClassLoader().loadClass(VirtualMachineBootstrap.ATTACH_PROVIDER_CLASS);
 			Method m = clazz.getDeclaredMethod("providers");
 			m.setAccessible(true);

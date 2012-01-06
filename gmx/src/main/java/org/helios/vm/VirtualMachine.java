@@ -365,7 +365,8 @@ public class VirtualMachine extends BaseWrappedClass {
 							String fileSep = sysProps.getProperty(FILE_SEP, File.separator);
 							String javaHome = sysProps.getProperty(JAVA_HOME);
 							String agentPath = String.format("%s%slib%s%s", javaHome, fileSep, fileSep, JMX_AGENT);
-							loadAgent(agentPath, JMX_PORT + "=" + FreePortFinder.getNextFreePort() + ",com.sun.management.jmxremote.authenticate=false");
+							loadAgent(agentPath);
+							//, JMX_PORT + "=" + FreePortFinder.getNextFreePort() + ",com.sun.management.jmxremote.authenticate=false");
 							connAddr = getAgentProperties().getProperty(CONNECTOR_ADDRESS);
 						}
 						if(connAddr==null) throw new RuntimeException("Failed to acquire JMXServiceURL for MBeanServerConnection to VirtualMachine [" + id() + "]", new Throwable());
