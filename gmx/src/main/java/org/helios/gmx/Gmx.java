@@ -64,6 +64,7 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.helios.gmx.classloading.ReverseClassLoader;
 import org.helios.gmx.jmx.RuntimeMBeanServer;
 import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
 import org.helios.gmx.util.JMXHelper;
@@ -79,14 +80,9 @@ import org.helios.vm.VirtualMachineDescriptor;
  * <p><code>org.helios.gmx.Gmx</code></p>
  * TODO:
  * MBeanServer[Connection] by JMXServiceURL, JMXServiceURL String and protocol components. 
- * MBeanServer[Connection] interface impl.
- * Property and invocation impl.
- * MBeanServerConnection connection listener
- * VMConnection by pid.  (and remote)
- * Remote MBeanServer Class Load
  * Auto Reconnect
  * Authentication for remote connections
- * Composite type attributes and operation return values
+ * attrs: just values, name/value pairs, set
  */
 
 public class Gmx implements GroovyObject, MBeanServerConnection, NotificationListener {
@@ -112,6 +108,11 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
+	/** The MetaMBean for the remoted class loader on this remote server */
+	protected MetaMBean remoteClassLoader = null;
+	/** The MetaMBean for the remoted MBeanServer on this remote server */
+	protected MetaMBean remotedMBeanServer = null;
+	
 	
 	/** The platform MBeanServer Default Domain Name */
 	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
@@ -326,6 +327,27 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	protected void finalize() throws Throwable {
 		close();
 		super.finalize();
+	}
+	
+	// =========================================================================================
+	//	Remoting operations
+	// =========================================================================================
+	
+	/**
+	 * Installs the remotable MBeanServer on the target MBeanServer
+	 * @return this Gmx
+	 */
+	public Gmx installRemote() {
+		ReverseClassLoader.getInstance().installRemotableMBeanServer(this);
+		return this;
+	}
+	
+	/**
+	 * Returns the remotable MBeanServer MetaMBean for this Gmx.
+	 * @return a MetaMBean
+	 */
+	public MetaMBean gmxRemote() {
+		return mbean(REMOTABLE_MBEANSERVER_ON);
 	}
 	
 	// =========================================================================================
@@ -750,7 +772,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param connNot The connection notification
 	 */
 	public void onConnectionOpened(JMXConnectionNotification connNot) {
-		System.out.println("Connection Opened:" + connNot);
+		//System.out.println("Connection Opened:" + connNot);
 	}
 	
 	/**
@@ -758,7 +780,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param connNot The connection notification
 	 */
 	public void onConnectionClosed(JMXConnectionNotification connNot) {
-		System.out.println("Connection Closed:" + connNot);
+		//System.out.println("Connection Closed:" + connNot);
 		close();
 	}
 
@@ -888,6 +910,34 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	    	}
 	        retValue.append("\n]");    
 	    return retValue.toString();
+	}
+	
+	/**
+	 * Callback from the ReverseClassLoader when the remotes have been installed
+	 * @param remoteClassLoader the MetaMBean for the remoted class loader on this remote server
+	 * @param remotedMBeanServer the MetaMBean for the remoted MBeanServer on this remote server
+	 */
+	protected void installedRemotes(MetaMBean remoteClassLoader, MetaMBean remotedMBeanServer) {
+		this.remoteClassLoader = remoteClassLoader;
+		this.remotedMBeanServer = remotedMBeanServer;
+	}
+	
+	/**
+	 * Returns the MetaMBean for the remoted class loader on this remote server
+	 * May be null if this has not been installed on the remote
+	 * @return the remoteClassLoader MetaMBean
+	 */
+	public MetaMBean getRemoteClassLoader() {
+		return remoteClassLoader;
+	}
+
+	/**
+	 * Returns the MetaMBean for the remoted MBeanServer on this remote server
+	 * May be null if this has not been installed on the remote
+	 * @return the remotedMBeanServer MetaMBean
+	 */
+	public MetaMBean getRemotedMBeanServer() {
+		return remotedMBeanServer;
 	}
 
 }
