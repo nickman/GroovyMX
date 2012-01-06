@@ -21,5 +21,23 @@ The output of the script is:
     java.lang:type=MemoryPool,name=PS Perm Gen:	84738048
     java.lang:type=MemoryPool,name=PS Old Gen:	268435456
 
+  * Requirements
+  * Architecture
+  * Dependencies
+  * Gmx
+    *  Local
+    *  Remote
+    *  Attach
+  * MetaMBeans
+  * Registering Listeners
+  * Remote Gmx Agent
+    * Upgrading Remote MBeanServerConnections to MBeanServers 
+    * Agents
+    * Remote Installs
+      * RMI
+      * SSH
+    * Reverse Class Loading
+    * Chanined Installs (Propagating Agents)
+  * MBean Cross Registration 
 
 [1]: https://github.com/nickman/GroovyMX/blob/master/content/img/gmx-160-X-160.png?raw=true "Helios"
