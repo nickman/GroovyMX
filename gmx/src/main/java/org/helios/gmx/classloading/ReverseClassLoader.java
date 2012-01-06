@@ -24,15 +24,20 @@
  */
 package org.helios.gmx.classloading;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
+import java.net.URL;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.GZIPOutputStream;
 
+import javax.management.ObjectName;
+import javax.management.loading.MLet;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -44,7 +49,10 @@ import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
 import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.eclipse.jetty.util.thread.ExecutorThreadPool;
+import org.helios.gmx.Gmx;
+import org.helios.gmx.jmx.remote.RemotableMBeanServer;
 import org.helios.gmx.util.FreePortFinder;
+import org.helios.gmx.util.JMXHelper;
 
 
 
@@ -68,6 +76,19 @@ public class ReverseClassLoader extends AbstractHandler {
 	protected SelectChannelConnector connector = null;
 	/** The server thread pool */
 	protected ExecutorThreadPool threadPool = null;
+	/** Indicates if the class loader is serving a jar or individual classes */
+	protected final boolean jarClassLoader; 
+	/** The byte array of the jar is a jar class loader is being used */
+	protected byte[] jarContent = null;
+	/** The gzipped byte array of the jar is a jar class loader is being used for remote classloaders reporting gzip support */
+	protected byte[] gzJarContent = null;
+	/** The URL of the code source for this class */
+	protected final URL codeSourceUrl = getClass().getProtectionDomain().getCodeSource().getLocation();
+	
+	/** The http classloading URI prefix */
+	public static final String HTTP_URI_PREFIX = "/classloader/";
+	/** The http classloading URI suffix for jar loading */
+	public static final String HTTP_URI_JAR_SUFFIX = "gmx.jar";
 	
 	/** The server's thread group */
 	private static final ThreadGroup threadGroup = new ThreadGroup("ReverseClassLoaderThreadGroup");
@@ -79,6 +100,24 @@ public class ReverseClassLoader extends AbstractHandler {
 	private static volatile ReverseClassLoader instance = null;
 	/** The singleton instance ctor lock */
 	private static final Object lock = new Object();
+	
+	/**
+	 * Returns the URL that remote class loaders should use to retrieve classes from this class loader.
+	 * If this class was loaded from a jar, the URL will refrence the jar, otherwise, will reference the file classpath.
+	 * Referencing the jar is more efficient since remotes can load the entire jar in one call, but the URI for individual classes is 
+	 * supported for development environments where these classes may not be packaged into a jar yet.
+	 * @return a classloading URL
+	 */
+	public URL getHttpCodeBaseURL() {
+		try {
+			if(jarClassLoader) {
+				return new URL(new StringBuilder("http://").append(server).append(":").append(port).append(HTTP_URI_PREFIX).append(HTTP_URI_JAR_SUFFIX).toString() );
+			} 
+			return new URL(new StringBuilder("http://").append(server).append(":").append(port).append(HTTP_URI_PREFIX).toString() );
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to build HttpCodeBaseURL", e);
+		}
+	}
 	
 	/**
 	 * Acquires the ReverseClassLoader instance, starting the server if it is not running.
@@ -99,7 +138,12 @@ public class ReverseClassLoader extends AbstractHandler {
 	 * Private ctor.
 	 * Starts the server.
 	 */
-	private ReverseClassLoader() {	
+	private ReverseClassLoader() {		
+		jarClassLoader = codeSourceUrl.toString().toLowerCase().endsWith(".jar");
+		if(jarClassLoader) {
+			loadJarBytes(codeSourceUrl);
+			log("Loaded Gmx jar bytes.\n\tStandard:" + jarContent.length + "\n\tGZipped:" + gzJarContent.length);
+		}
 		server = new Server();
 		threadPool = new ExecutorThreadPool(Executors.newCachedThreadPool(new ThreadFactory(){
 			public Thread newThread(Runnable r) {
@@ -121,6 +165,45 @@ public class ReverseClassLoader extends AbstractHandler {
 			e.printStackTrace(System.err);
 		}
 		startServer();
+	}
+	
+	/**
+	 * Loads the Gmx jar into a byte array for serving to remote class loaders
+	 * @param jarUrl The URL of the jar resource.
+	 */
+	protected void loadJarBytes(URL jarUrl) {
+		if(jarUrl==null) throw new IllegalArgumentException("The passed jarUrl was null", new Throwable());
+		ByteArrayOutputStream baos = null;
+		BufferedInputStream bis = null;
+		InputStream is = null;	
+		GZIPOutputStream gzipOut = null;
+		try {
+			is = jarUrl.openStream();
+			bis = new BufferedInputStream(is);
+			baos = new ByteArrayOutputStream(is.available());
+			byte[] buffer = new byte[8092];
+			int bytesRead = -1;
+			while((bytesRead=bis.read(buffer))!=-1) {
+				baos.write(buffer, 0, bytesRead);
+			}
+			baos.flush();
+			jarContent = baos.toByteArray();
+			baos.close();
+			baos = new ByteArrayOutputStream(jarContent.length);
+			gzipOut = new GZIPOutputStream(baos, jarContent.length);
+			gzipOut.write(jarContent);
+			gzipOut.flush();
+			gzipOut.finish();
+			baos.flush();
+			gzJarContent = baos.toByteArray();
+			gzipOut.close();
+			baos.close();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to load bytes for jar [" + jarUrl + "]", e);
+		} finally {
+			if(bis!=null) try { bis.close(); } catch (Exception e) {}
+			if(is!=null) try { is.close(); } catch (Exception e) {}			
+		}
 	}
 	
 	/**
@@ -163,46 +246,93 @@ public class ReverseClassLoader extends AbstractHandler {
 	@Override
 	public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 		
-		String className = target.replace("/classloader/", "").replace(".class", "").replace('/', '.');
+		String className = target.replace(HTTP_URI_PREFIX, "").replace(".class", "").replace('/', '.');
 		
 		byte[] classBytes = null;
 		InputStream is = null;
-		try {
-			Class<?> clazz = Class.forName(className);					
-			is = clazz.getClassLoader().getResourceAsStream(target.replace("/classloader/", ""));
-			ByteArrayOutputStream baos = new ByteArrayOutputStream(is.available());
-			byte[] buffer = new byte[8096];
-			int bytesRead = -1;
-			while((bytesRead=is.read(buffer))!=-1) {
-				baos.write(buffer, 0, bytesRead);
+		if(!jarClassLoader) {
+			try {
+				Class<?> clazz = Class.forName(className);					
+				is = clazz.getClassLoader().getResourceAsStream(target.replace(HTTP_URI_PREFIX, ""));
+				ByteArrayOutputStream baos = new ByteArrayOutputStream(is.available());
+				byte[] buffer = new byte[8096];
+				int bytesRead = -1;
+				while((bytesRead=is.read(buffer))!=-1) {
+					baos.write(buffer, 0, bytesRead);
+				}
+				baos.flush();
+				is.close();
+				classBytes = baos.toByteArray();
+				
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to load class [" + className + "]", e);
+			} finally {
+				if(is!=null) try { is.close(); } catch (Exception e) {};
 			}
-			baos.flush();
-			is.close();
-			classBytes = baos.toByteArray();
-			
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to load class [" + className + "]", e);
-		} finally {
-			if(is!=null) try { is.close(); } catch (Exception e) {};
 		}
+		OutputStream os = response.getOutputStream();
+		GZIPOutputStream gzipOut = null;
+		String encodings = request.getHeader("Accept-Encoding");
+		boolean gzipAgent = false;
+		if (encodings != null && encodings.indexOf("gzip") != -1) {
+			// Go with GZIP
+			gzipAgent = true;
+		    response.setHeader("Content-Encoding", "gzip");
+		    if(!jarClassLoader) {
+		    	gzipOut = new GZIPOutputStream(os, classBytes.length);
+		    }
+		}
+
         response.setContentType("application/octet-stream");
         response.setStatus(HttpServletResponse.SC_OK);
-        response.setContentLength(classBytes.length);
-        baseRequest.setHandled(true);
-        OutputStream os = response.getOutputStream();
-        os.write(classBytes);
+        if(jarClassLoader) {
+        	if(gzipAgent) {
+        		os.write(gzJarContent);
+        	} else {
+        		os.write(jarContent);
+        	}
+        } else {
+        	response.setContentLength(classBytes.length);
+        	if(gzipOut!=null) {
+        		gzipOut.write(classBytes);
+        		gzipOut.flush();
+        		gzipOut.finish();        		
+        	} else {
+        		os.write(classBytes);        		
+        	}        	
+        }
         os.flush();        
-        //log("Served Class [" + className + "] in [" + classBytes.length + "] Bytes" );
+        baseRequest.setHandled(true);
 	}
 	
 	protected void log(Object msg) {
 		System.out.println(msg);
 	}
 	
-	
+	/**
+	 * Installs the remotable MBeanServer MBean in the MBeanServer associated with the passd Gmx
+	 * @param gmx The Gmx connected to the target MBeanServer in which to install the remotable MBeanServer MBean 
+	 */
+	public void installRemotableMBeanServer(Gmx gmx) {
+		ObjectName classLoaderOn = JMXHelper.objectName(new StringBuilder("org.helios.gmx:service=ReverseClassLoader,host=").append(bindInterface).append(",port=").append(port));		
+		if(!gmx.getMBeanServerConnection().isRegistered(Gmx.REMOTABLE_MBEANSERVER_ON)) {
+			if(!gmx.getMBeanServerConnection().isRegistered(classLoaderOn)) {			
+				gmx.getMBeanServerConnection().createMBean(MLet.class.getName(), classLoaderOn, new Object[]{new URL[]{this.getHttpCodeBaseURL()}, true}, new String[]{URL[].class.getName(), boolean.class.getName()});
+			}
+			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), Gmx.REMOTABLE_MBEANSERVER_ON, classLoaderOn);
+		}
+	}
 }
 
 /**
+ * 
+ * Needs:
+ * register remotables with Gmx when installed
+ * set sysprop on install on target server so agents can quickly determine if agent is installed
+ * unregister on ??
+ * 
+ * 
+ * 
 	Groovy Code Demonstrating Remote MBeanServer MBean Install
 	===========================================================
 

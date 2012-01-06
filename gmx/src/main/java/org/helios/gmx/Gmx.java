@@ -116,6 +116,9 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	/** The platform MBeanServer Default Domain Name */
 	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
 	
+	/** The standard JMX ObjectName of the remotable MBeanServer MBean */
+	public static final ObjectName REMOTABLE_MBEANSERVER_ON = JMXHelper.objectName("org.helios.gmx:service=RemotableMBeanServer");
+	
 	/** This JVM's PID */
 	public static final String PID = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
 
@@ -807,6 +810,15 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public RuntimeMBeanServer getMBeanServer() {
 		return mbeanServer;
 	}
+	
+	/**
+	 * Returns the internal MBeanServerConnection reference
+	 * @return the internal MBeanServerConnection reference 
+	 */
+	public RuntimeMBeanServerConnection getMBeanServerConnection() {
+		return mbeanServerConnection;
+	}
+	
 
 	/**
 	 * The remote JMX connection
