@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -106,6 +107,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	protected String serverDomain = null;
 	/** The mbean server jvm instance runtime name */
 	protected String jvmName = null;
+	/** Flag to indicate if this Gmx is connected */
+	protected final AtomicBoolean connected = new AtomicBoolean(false);
 	
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
@@ -126,6 +129,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		this.mbeanServerConnection = RuntimeMBeanServerConnection.getInstance(mbeanServerConnection);
 		if(this.mbeanServerConnection instanceof MBeanServer) {
 			this.mbeanServer = RuntimeMBeanServer.getInstance((MBeanServer)this.mbeanServerConnection);
+			connected.set(true);
 		} else {
 			this.mbeanServer = null;
 		}
@@ -146,6 +150,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 			this.connector = JMXConnectorFactory.connect(serviceURL);
 			this.mbeanServerConnection = RuntimeMBeanServerConnection.getInstance(connector.getMBeanServerConnection());
 			this.connectionId = connector.getConnectionId();
+			connected.set(true);
 			connector.addConnectionNotificationListener(this, null, this.connectionId);
 			if(this.mbeanServerConnection instanceof MBeanServer) {
 				this.mbeanServer = RuntimeMBeanServer.getInstance((MBeanServer)this.mbeanServerConnection);
@@ -218,30 +223,44 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	
 	/**
 	 * Locates all JVMs on the local host using the attach API and invokes the passed closure on each.
+	 * If a closure is provided, the Gmx will be closed after the closure is invoked and the return value will be null.
+	 * Otherwise, the return value will be live Gmx instances.
 	 * Attach failures are silently ignored.
 	 * @param includeThis If true, includes this JVM (the one running this command)
-	 * @param gmxHandler The optional closure to execute on each Gmx created for each discovered JVM.
+	 * @param gmxHandler The optional closure to execute on each Gmx created for each discovered JVM. 
 	 * @return An array of Gmx instances created for each located and successfully attached JVM.
 	 */
 	public static Gmx[] attachInstances(boolean includeThis, Closure<Gmx> gmxHandler) {
 		Set<Gmx> set = new HashSet<Gmx>();
 		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
 			if(!vmd.id().equals(PID) || (vmd.id().equals(PID) && includeThis)) {
+				Gmx gmx = null;
 				try {
-					Gmx gmx = Gmx.attachInstance(vmd.id());
-					set.add(Gmx.attachInstance(vmd.id()));
-					if(gmxHandler!=null) {
+					gmx = Gmx.attachInstance(vmd.id());
+				} catch (Exception e) {
+					continue;
+				}
+				if(gmxHandler!=null) {
+					try {
 						gmxHandler.call(gmx);
+					} finally {
+						gmx.close();
 					}
-				} catch (Exception e) {}
+				} else {
+					try {
+						set.add(Gmx.attachInstance(vmd.id()));
+					} catch (Exception e) {}
+				}				
 			}
 		}
-		return set.toArray(new Gmx[set.size()]);
+		return gmxHandler!=null ? null : set.toArray(new Gmx[set.size()]);
 	}
 	
 	/**
 	 * Locates all JVMs on the local host (not including this one) using the attach API and invokes the passed closure on each.
 	 * Attach failures are silently ignored.
+	 * If a closure is provided, the Gmx will be closed after the closure is invoked and the return value will be null.
+	 * Otherwise, the return value will be live Gmx instances.
 	 * @param gmxHandler The optional closure to execute on each Gmx created for each discovered JVM.
 	 * @return An array of Gmx instances created for each located and successfully attached JVM.
 	 */
@@ -275,6 +294,35 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public boolean isRemote() {
 		return connector!=null;
+	}
+	
+	/**
+	 * Closes a remote connection.
+	 * If this is not a remote Gmx, or the connection is already closed, the command does nothing.
+	 */
+	public void close() {
+		if(connector!=null) {			
+			try { connector.close(); } catch (Exception e) {}
+			connected.set(false);
+		}
+	}
+	
+	/**
+	 * Indicates if this Gmx is connected.
+	 * @return true if this Gmx is live, false if it is disconnected.
+	 */
+	public boolean isConnected() {
+		return connected.get();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see java.lang.Object#finalize()
+	 */
+	@Override
+	protected void finalize() throws Throwable {
+		close();
+		super.finalize();
 	}
 	
 	// =========================================================================================
@@ -708,6 +756,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public void onConnectionClosed(JMXConnectionNotification connNot) {
 		System.out.println("Connection Closed:" + connNot);
+		close();
 	}
 
 	/**
@@ -716,6 +765,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public void onConnectionFailed(JMXConnectionNotification connNot) {
 		System.out.println("Connection Failed:" + connNot);
+		close();
 	}
 	
 	/**

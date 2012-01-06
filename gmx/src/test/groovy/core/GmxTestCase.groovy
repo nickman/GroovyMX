@@ -95,11 +95,38 @@ class GmxLocalTestCase extends GroovyTestCase {
     	assert localDomain == gmx.serverDomain;
     }
     
+    /**  Useful, but runs slowly.
     void testAttachAll() {
     	Gmx.attachInstances(true, {
     		println it;
     	});
     }
+    */
+    
+    void testAttachScopeWithClosure() {
+    	def locatedVms = new HashSet();
+    	def gmxSet = Gmx.attachInstances(true, {
+    		locatedVms.add(it);
+    	});
+    	assert gmxSet == null;
+    	assert locatedVms.isEmpty() == false;
+    	locatedVms.each() {
+    		assert it.isConnected() == false;
+    	}
+    	
+    }
+    
+    void testAttachScopeWithNullClosure() {    	
+    	def gmxSet = Gmx.attachInstances(true);
+    	assert gmxSet != null;
+    	assert gmxSet.length > 0;    	
+    	gmxSet.each() {
+    		assert it.isConnected() == true;
+    		try { it.close(); } catch (e) {}
+    		assert it.isConnected() == false;
+    	}
+    	
+    }    
     
     
 }
