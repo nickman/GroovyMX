@@ -24,7 +24,14 @@
  */
 package org.helios.gmx.jmx.remote;
 
+import groovy.lang.Binding;
+import groovy.lang.GroovyShell;
+import groovy.lang.Script;
+
 import java.io.ObjectInputStream;
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import javax.management.Attribute;
@@ -48,7 +55,6 @@ import javax.management.OperationsException;
 import javax.management.QueryExp;
 import javax.management.ReflectionException;
 import javax.management.loading.ClassLoaderRepository;
-import javax.servlet.AsyncEvent;
 
 /**
  * <p>Title: RemotableMBeanServer</p>
@@ -57,16 +63,31 @@ import javax.servlet.AsyncEvent;
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>org.helios.gmx.jmx.remote.RemotableMBeanServer</code></p>
  */
-public class RemotableMBeanServer implements RemotableMBeanServerMBean {
+public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializable {
+	/**  */
+	private static final long serialVersionUID = 5409466004786907167L;
 	/** The registration injected MBeanServer */
-	protected MBeanServer server = null;
+	protected transient MBeanServer server = null;
 	/** The ObjectName this MBean is registered as */
 	protected ObjectName objectName = null;
 	
-	protected AsyncEvent ev = null;
-	
-	public AsyncEvent getAsyncEvent() {
-		return ev;
+	/**
+	 * Invokes the submitted script passing in the MBeanServer as a binding and returning the script's return value.
+	 * @param script The script to execute.
+	 * @param args Arguments to the script
+	 * @return the script's return value
+	 */
+	public Object invokeScript(String script, Object...args) {
+		try {
+			Map<String, Object> binds = new HashMap<String, Object>(1);
+			binds.put("server", server);
+			binds.put("arguments", args);
+			GroovyShell shell = new GroovyShell(new Binding(binds));
+			return shell.evaluate(script);
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+			throw new RuntimeException("Failed to invoke script", e);
+		}
 	}
 
 	/**

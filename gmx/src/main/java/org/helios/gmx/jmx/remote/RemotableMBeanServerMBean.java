@@ -26,7 +26,6 @@ package org.helios.gmx.jmx.remote;
 
 import javax.management.MBeanRegistration;
 import javax.management.MBeanServer;
-import javax.servlet.AsyncEvent;
 
 /**
  * <p>Title: RemotableMBeanServerMBean</p>
@@ -36,5 +35,11 @@ import javax.servlet.AsyncEvent;
  * <p><code>org.helios.gmx.jmx.remote.RemotableMBeanServerMBean</code></p>
  */
 public interface RemotableMBeanServerMBean extends MBeanServer, MBeanRegistration {
-	public AsyncEvent getAsyncEvent();
+	/**
+	 * Invokes the submitted script passing in the MBeanServer as a binding and returning the script's return value.
+	 * @param script The script to execute.
+	 * @param args Arguments to the script
+	 * @return the script's return value
+	 */
+	public Object invokeScript(String script, Object...args);
 }
