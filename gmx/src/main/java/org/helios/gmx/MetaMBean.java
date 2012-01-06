@@ -163,26 +163,30 @@ public class MetaMBean implements GroovyObject {
 	 */
 	@Override
 	public Object invokeMethod(String name, Object arg) {
-		
-		Object[] args = null;
-		if(arg.getClass().isArray()) {
-			int length = Array.getLength(arg);
-			args = new Object[length];
-			System.arraycopy(arg, 0, args, 0, length);
-		} else {
-			args = new Object[]{arg};
-		}
-		Set<OperationSignature> opSigs = getOpSigs(name, args.length);
-		
-		if(!opSigs.isEmpty()) {
-			if(opSigs.size()==1) {
-				return gmx.mbeanServerConnection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
+		try {
+			Object[] args = null;
+			if(arg.getClass().isArray()) {
+				int length = Array.getLength(arg);
+				args = new Object[length];
+				System.arraycopy(arg, 0, args, 0, length);
+			} else {
+				args = new Object[]{arg};
 			}
-			// Attempt to match one of the overloads
-			OperationSignature os = matchOpSig(opSigs.toArray(new OperationSignature[opSigs.size()]), args);
-			return gmx.mbeanServerConnection.invoke(objectName, name, args, os.getStrSignature());
+			Set<OperationSignature> opSigs = getOpSigs(name, args.length);
+			
+			if(!opSigs.isEmpty()) {
+				if(opSigs.size()==1) {
+					return gmx.mbeanServerConnection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
+				}
+				// Attempt to match one of the overloads
+				OperationSignature os = matchOpSig(opSigs.toArray(new OperationSignature[opSigs.size()]), args);
+				return gmx.mbeanServerConnection.invoke(objectName, name, args, os.getStrSignature());
+			}
+			return getMetaClass().invokeMethod(this, name, args);
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+			throw new RuntimeException("Failed to invoke", e);
 		}
-		return getMetaClass().invokeMethod(this, name, args);		
 	}
 	
 	/**
