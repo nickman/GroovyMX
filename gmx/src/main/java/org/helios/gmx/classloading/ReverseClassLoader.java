@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.net.URL;
+import java.nio.channels.ServerSocketChannel;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
@@ -84,7 +85,8 @@ public class ReverseClassLoader extends AbstractHandler {
 	protected byte[] gzJarContent = null;
 	/** The URL of the code source for this class */
 	protected final URL codeSourceUrl = getClass().getProtectionDomain().getCodeSource().getLocation();
-	
+	/** The stats MBeanContainer */
+	protected MBeanContainer container;
 	/** The http classloading URI prefix */
 	public static final String HTTP_URI_PREFIX = "/classloader/";
 	/** The http classloading URI suffix for jar loading */
@@ -111,9 +113,9 @@ public class ReverseClassLoader extends AbstractHandler {
 	public URL getHttpCodeBaseURL() {
 		try {
 			if(jarClassLoader) {
-				return new URL(new StringBuilder("http://").append(server).append(":").append(port).append(HTTP_URI_PREFIX).append(HTTP_URI_JAR_SUFFIX).toString() );
+				return new URL(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX).append(HTTP_URI_JAR_SUFFIX).toString() );
 			} 
-			return new URL(new StringBuilder("http://").append(server).append(":").append(port).append(HTTP_URI_PREFIX).toString() );
+			return new URL(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX).toString() );
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to build HttpCodeBaseURL", e);
 		}
@@ -154,7 +156,7 @@ public class ReverseClassLoader extends AbstractHandler {
 		}));
 		server.setThreadPool(threadPool);
 		try {
-			MBeanContainer container = new MBeanContainer(ManagementFactory.getPlatformMBeanServer());
+			container = new MBeanContainer(ManagementFactory.getPlatformMBeanServer());
 			container.setDomain(getClass().getPackage().getName());
 			container.addBean(stats);			
 			container.addBean(server);
@@ -212,16 +214,19 @@ public class ReverseClassLoader extends AbstractHandler {
 	private void startServer() {
 		try {
 			bindInterface = FreePortFinder.hostName();
-			port = FreePortFinder.getNextFreePort(bindInterface);
+			//port = FreePortFinder.getNextFreePort(bindInterface);
 			connector = new SelectChannelConnector();
-			connector.setPort(port);
+			connector.setPort(0);
 			connector.setMaxIdleTime(30000);
 			server.addConnector(connector);
-			stats.setHandler(this);
+			stats.setHandler(this);			
 			server.setHandler(stats);
 			server.start();
+			port = connector.getPort();
+			ServerSocketChannel channel = (ServerSocketChannel)connector.getConnection();
+			port = channel.socket().getLocalPort();
 			log("Started HTTP Server on [" + bindInterface + ":" + port + "]");
-			server.join();			
+			container.addBean(connector);
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to start Jetty HTTP Server on [" + bindInterface + ":" + port + "]", e);
 		}
@@ -245,7 +250,7 @@ public class ReverseClassLoader extends AbstractHandler {
 	 */
 	@Override
 	public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-		
+		log("Request Target [" + target + "] \n\tfrom [" + request.getRemoteAddr() + ":" + request.getRemotePort() + "]");
 		String className = target.replace(HTTP_URI_PREFIX, "").replace(".class", "").replace('/', '.');
 		
 		byte[] classBytes = null;
@@ -319,7 +324,12 @@ public class ReverseClassLoader extends AbstractHandler {
 			if(!gmx.getMBeanServerConnection().isRegistered(classLoaderOn)) {			
 				gmx.getMBeanServerConnection().createMBean(MLet.class.getName(), classLoaderOn, new Object[]{new URL[]{this.getHttpCodeBaseURL()}, true}, new String[]{URL[].class.getName(), boolean.class.getName()});
 			}
-			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), Gmx.REMOTABLE_MBEANSERVER_ON, classLoaderOn);
+			try {
+				gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), Gmx.REMOTABLE_MBEANSERVER_ON, classLoaderOn);
+			} catch (Exception e) {
+				e.printStackTrace(System.err);
+				throw new RuntimeException("Failed to install RemotableMBeanServer", e);
+			}
 		}
 	}
 }
