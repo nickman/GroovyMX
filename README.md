@@ -39,5 +39,7 @@ The output of the script is:
     * Reverse Class Loading
     * Chanined Installs (Propagating Agents)
   * MBean Cross Registration 
+  * See [groovy-remote][2] for closure remoting.
 
 [1]: https://github.com/nickman/GroovyMX/blob/master/content/img/gmx-160-X-160.png?raw=true "Helios"
+[2]: https://github.com/alkemist/groovy-remote "groovy-remote"
