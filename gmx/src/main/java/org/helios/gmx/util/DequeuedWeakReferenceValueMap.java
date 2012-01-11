@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class DequeuedWeakReferenceValueMap<K, V> {
 	/** The inner map of weak reference values */
-	private final Map<K, KeyAwareWeakReferenceValue<K,V>> referenceMap = new ConcurrentHashMap<K, KeyAwareWeakReferenceValue<K,V>>();
+	private final Map<K, KeyAwareWeakReferenceValue> referenceMap = new ConcurrentHashMap<K, KeyAwareWeakReferenceValue>();
 	
 	/** The reference queue that will be processed by the queue processor thread */
 	private static final ReferenceQueue<?> REF_Q = new ReferenceQueue<Object>();
@@ -73,11 +73,12 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * Puts a new value into the map
 	 * @param key The map key
 	 * @param value The map value
+	 * @param runnables Optional additional runnables to execute on reference enqueue
 	 * @return The old value that was bound under the key, or null if there was none.
 	 */
 	@SuppressWarnings("unchecked")
-	public V put(K key, V value) {
-		KeyAwareWeakReferenceValue<K,V> oldRef =  referenceMap.put(key, new KeyAwareWeakReferenceValue<K,V>(key, value, (ReferenceQueue<? super V>) REF_Q));
+	public V put(K key, V value, Runnable...runnables) {
+		KeyAwareWeakReferenceValue oldRef =  referenceMap.put(key, new KeyAwareWeakReferenceValue(key, value, (ReferenceQueue<? super V>) REF_Q, runnables));
 		if(oldRef!=null) {
 			return oldRef.get();
 		}
@@ -90,7 +91,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * @return The value or null if not found
 	 */
 	public V get(K key) {
-		KeyAwareWeakReferenceValue<K,V> ref =  referenceMap.get(key);
+		KeyAwareWeakReferenceValue ref =  referenceMap.get(key);
 		if(ref!=null) {
 			return ref.get();
 		}
@@ -103,8 +104,21 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * @return true if the key is present in the map, false otherwise
 	 */
 	public boolean containsKey(K key) {
-		KeyAwareWeakReferenceValue<K,V> ref =  referenceMap.get(key);
+		KeyAwareWeakReferenceValue ref =  referenceMap.get(key);
 		return ref!=null && !ref.isEnqueued();
+	}
+	
+	/**
+	 * Removes the value keyed by the passed key from the map
+	 * @param key The key to remove
+	 * @return Ther removed value or null
+	 */
+	public V remove(K key) {
+		KeyAwareWeakReferenceValue ref = referenceMap.remove(key);
+		if(ref!=null) {
+			return ref.get();
+		}
+		return null;
 	}
 	
 	
@@ -114,19 +128,25 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * <p>Company: Helios Development Group LLC</p>
 	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
 	 * <p><code>org.helios.gmx.util.DequeuedWeakReferenceValueMap.KeyAwareWeakReferenceValue</code></p>
+	 * @param K The type of the key
+	 * @param V The value of the key wrapped in a weak reference
 	 */
-	private class KeyAwareWeakReferenceValue<K, V> extends WeakReference<V> implements Runnable {
+	public class KeyAwareWeakReferenceValue extends WeakReference<V> implements Runnable {
 		/** The key used to clear the map entry in {@link DequeuedWeakReferenceValueMap#referenceMap} */
 		private final K key;
+		/** Runnable overrides */
+		private final Runnable[] runnables;
+		
 		/**
 		 * Creates a new KeyAwareWeakReferenceValue
 		 * @param key The key associated with the weakly referenced value
 		 * @param value The value to be held as a weak reference
 		 * @param refQueue The reference queue
 		 */
-		public KeyAwareWeakReferenceValue(K key, V value, ReferenceQueue<? super V> refQueue) {
+		public KeyAwareWeakReferenceValue(K key, V value, ReferenceQueue<? super V> refQueue, Runnable...runnables) {
 			super(value, refQueue);
 			this.key =key;
+			this.runnables = (runnables==null || runnables.length<1) ? null : runnables;
 		}
 		
 		/**
@@ -136,8 +156,12 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 		 */
 		@Override
 		public void run() {
-			referenceMap.remove(key);
-			System.out.println("\n\t=============\n\tCleared Weak Ref:" + key + "\n\t=============");
+			referenceMap.remove(key);			
+			if(runnables!=null) {
+				for(Runnable r: runnables) {
+					r.run();
+				}
+			}
 		}
 		
 	}

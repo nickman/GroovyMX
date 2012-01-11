@@ -26,6 +26,7 @@ package org.helios.gmx.classloading;
 
 import groovy.lang.Closure;
 import groovy.lang.GroovyClassLoader;
+import groovyjarjarasm.asm.ClassReader;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
@@ -35,8 +36,11 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
+import java.lang.instrument.UnmodifiableClassException;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Method;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.channels.ServerSocketChannel;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
@@ -53,8 +57,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
 
 import javax.management.MBeanServerInvocationHandler;
-import javax.management.NotificationFilter;
-import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.loading.MLet;
 import javax.management.loading.PrivateMLet;
@@ -86,7 +88,7 @@ import org.helios.vm.agent.LocalAgentInstaller;
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>org.helios.gmx.classloading.ReverseClassLoader</code></p>
  */
-public class ReverseClassLoader extends AbstractHandler implements ClassFileTransformer  {
+public class ReverseClassLoader extends AbstractHandler  {
 	/** The Jetty Server instance */
 	protected Server server;
 	/** The assigned listening port */
@@ -111,12 +113,8 @@ public class ReverseClassLoader extends AbstractHandler implements ClassFileTran
 	protected MBeanContainer container;
 	/** A set of dynamically created class loaders that can load classes that may be requested by a remote class loader */
 	protected final Map<ClassLoader, ClassLoader> classLoaders = new WeakHashMap<ClassLoader, ClassLoader>();
-	/** The AgentInstrumentation MBean that provides byte code for dynamically generated closures */
-	protected final AgentInstrumentationMBean agentInstrumentation;
 	/** A map of closure bytecode byte arrays keyed by the class resource name */
-	protected final ByteCodeRepository byteCodeRepo = new ByteCodeRepository();
-	
-	
+	protected final ByteCodeRepository byteCodeRepo = ByteCodeRepository.getInstance();
 	
 	
 	/** The http classloading URI prefix */
@@ -138,30 +136,7 @@ public class ReverseClassLoader extends AbstractHandler implements ClassFileTran
 	private static final Object lock = new Object();
 	
 	
-	/**
-	 * {@inheritDoc}
-	 * @see java.lang.instrument.ClassFileTransformer#transform(java.lang.ClassLoader, java.lang.String, java.lang.Class, java.security.ProtectionDomain, byte[])
-	 */
-	@Override
-	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
-		if(className.toLowerCase().contains("closure")) {
-			System.out.println("Transform on Closure Class [" + className + "]");
-		}
-		byte[] bytecode = classfileBuffer;
-		if(loader instanceof GroovyClassLoader) {
-			System.out.println("Transform on Groovy Class Load [" + className + "]");
-			System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");
-		}
-		if(classBeingRedefined!=null) {
-			System.out.println("Redefine on Closure Class [" + className + "] with ClassLoader [" + loader + "]:[" + loader.getClass().getName() + "]");
-			if(GeneratedClosure.class.isAssignableFrom(classBeingRedefined) || (loader instanceof GroovyClassLoader.InnerLoader)) {
-				System.out.println("Transform on Groovy Class Transform [" + className + "]");
-				System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");
-			}
-		}
-		return bytecode;
-	}
-	
+
 	
 	/**
 	 * Returns the URL array that remote class loaders should use to retrieve classes from this class loader.
@@ -202,7 +177,6 @@ public class ReverseClassLoader extends AbstractHandler implements ClassFileTran
 	 * Indexes the class name of the passed closure class
 	 * @param closure The closure to register
 	 */
-	@SuppressWarnings("rawtypes")
 	public void registerClosure(Closure<?> closure) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
 		Class<? extends Closure> closureClass = closure.getClass();
@@ -276,11 +250,8 @@ public class ReverseClassLoader extends AbstractHandler implements ClassFileTran
 	 * Private ctor.
 	 * Starts the server.
 	 */
-	private ReverseClassLoader() {		
-		LocalAgentInstaller.getInstrumentation();
+	private ReverseClassLoader() {				
 		classLoaders.put(getClass().getClassLoader(), getClass().getClassLoader());
-		agentInstrumentation = MBeanServerInvocationHandler.newProxyInstance(ManagementFactory.getPlatformMBeanServer(), AgentInstrumentationMBean.AGENT_INSTR_ON, AgentInstrumentationMBean.class, false);
-		agentInstrumentation.addTransformer(this, true);
 		jarClassLoader = codeSourceUrl.toString().toLowerCase().endsWith(".jar");
 		if(jarClassLoader) {
 			loadJarBytes(codeSourceUrl);
@@ -490,6 +461,34 @@ public class ReverseClassLoader extends AbstractHandler implements ClassFileTran
 
 
 
+	/**
+	 * @param clazz
+	 * @return
+	 * @see org.helios.gmx.classloading.ByteCodeRepository#getByteCode(java.lang.Class)
+	 */
+	public byte[] getByteCode(Class<?> clazz) {
+		return byteCodeRepo.getByteCode(clazz);
+	}
+
+	/**
+	 * @param className
+	 * @return
+	 * @see org.helios.gmx.classloading.ByteCodeRepository#getByteCode(java.lang.String)
+	 */
+	public byte[] getByteCode(String className) {
+		return byteCodeRepo.getByteCode(className);
+	}
+
+	/**
+	 * @param className
+	 * @return
+	 * @see org.helios.gmx.classloading.ByteCodeRepository#getByteCodeFromResource(java.lang.String)
+	 */
+	public byte[] getByteCodeFromResource(String className) {
+		return byteCodeRepo.getByteCodeFromResource(className);
+	}
+	
+	
 
 }
 
