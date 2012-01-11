@@ -123,7 +123,10 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
 	
 	/** The standard JMX ObjectName prefix of the remotable MBeanServer MBean */
-	public static final String REMOTE_MBEANS_ON_PREFIX = "org.helios.gmx:service=%s,host=%s,port=%s";
+	public static final String REMOTE_MBEANSERVER_ON_PREFIX = "org.helios.gmx:service=RemotableMBeanServer,domain=%s,host=%s,port=%s";
+	/** The standard JMX ObjectName prefix of the remotable MBeanServer MBean */
+	public static final String REMOTE_MLET_ON_PREFIX = "org.helios.gmx:service=ReverseClassLoader,host=%s,port=%s";
+	
 	
 	/** A set of Gmx references that will be closed and cleared on shutdown */
 	public static final Set<WeakReference<Gmx>> GMX_REFERENCES = new CopyOnWriteArraySet<WeakReference<Gmx>>();
@@ -403,12 +406,22 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	
 	/**
 	 * Installs the remotable MBeanServer on the target MBeanServer
+	 * @param privateMlet If true, the MLet will be private, otherwise it will be public.
+	 * @return this Gmx
+	 */
+	public Gmx installRemote(boolean privateMlet) {
+		ReverseClassLoader.getInstance().installRemotableMBeanServer(this, privateMlet);
+		return this;
+	}
+	
+	/**
+	 * Installs the remotable MBeanServer on the target MBeanServer with a private MLet
 	 * @return this Gmx
 	 */
 	public Gmx installRemote() {
-		ReverseClassLoader.getInstance().installRemotableMBeanServer(this, true);
-		return this;
+		return installRemote(true);
 	}
+	
 	
 	/**
 	 * Callback from the reverse class loader providing the ObjectNames of the insalled remotes.

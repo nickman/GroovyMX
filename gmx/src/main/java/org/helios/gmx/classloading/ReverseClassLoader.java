@@ -25,8 +25,6 @@
 package org.helios.gmx.classloading;
 
 import groovy.lang.Closure;
-import groovy.lang.GroovyClassLoader;
-import groovyjarjarasm.asm.ClassReader;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
@@ -34,15 +32,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.lang.instrument.ClassFileTransformer;
-import java.lang.instrument.IllegalClassFormatException;
-import java.lang.instrument.UnmodifiableClassException;
 import java.lang.management.ManagementFactory;
-import java.lang.reflect.Method;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.channels.ServerSocketChannel;
-import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -56,7 +48,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
 
-import javax.management.MBeanServerInvocationHandler;
+import javax.management.Attribute;
 import javax.management.ObjectName;
 import javax.management.loading.MLet;
 import javax.management.loading.PrivateMLet;
@@ -76,8 +68,6 @@ import org.helios.gmx.Gmx;
 import org.helios.gmx.jmx.remote.RemotableMBeanServer;
 import org.helios.gmx.util.FreePortFinder;
 import org.helios.gmx.util.JMXHelper;
-import org.helios.vm.agent.AgentInstrumentationMBean;
-import org.helios.vm.agent.LocalAgentInstaller;
 
 
 
@@ -209,7 +199,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 */
 	protected byte[] getClassBytes(String className) {
 		if(className==null) throw new IllegalArgumentException("The passed class name was null", new Throwable());
-		byte[] bytecode = byteCodeRepo.getByteCode(className);
+		byte[] bytecode = byteCodeRepo.getByteCodeFromResource(className);
 		if(bytecode!=null) return bytecode;
 		InputStream is = null;
 		List<ClassLoader> loaders = null;
@@ -324,6 +314,9 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 * Starts the server.
 	 */
 	private void startServer() {
+		if(server.isStarted() || server.isStarting() || server.isRunning()) {
+			return;
+		}
 		try {
 			bindInterface = FreePortFinder.hostName();
 			//port = FreePortFinder.getNextFreePort(bindInterface);
@@ -392,7 +385,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX));
 		byte[] classBytes = null;
 		if(!jarRequest) {
-			classBytes = getClassBytes(target.replace(HTTP_URI_PREFIX, "").replace(".class", ""));
+			classBytes = getClassBytes(target.replace(HTTP_URI_PREFIX, ""));
 		}
 		OutputStream os = response.getOutputStream();
 		GZIPOutputStream gzipOut = null;
@@ -447,14 +440,32 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 * @param privateClassLoader If true, the classloading MBean initially registered will be private, otherwise it will be public. 
 	 */
 	public void installRemotableMBeanServer(Gmx gmx, boolean privateClassLoader) {		
-		ObjectName classLoaderOn = JMXHelper.objectName(String.format(Gmx.REMOTE_MBEANS_ON_PREFIX, "ReverseClassLoader", bindInterface, port));
-		ObjectName mbeanServerOn = JMXHelper.objectName(String.format(Gmx.REMOTE_MBEANS_ON_PREFIX, "RemotableMBeanServer", bindInterface, port));
+		ObjectName classLoaderOn = JMXHelper.objectName(String.format(Gmx.REMOTE_MLET_ON_PREFIX,  bindInterface, port));
+		ObjectName mbeanServerOn = JMXHelper.objectName(String.format(Gmx.REMOTE_MBEANSERVER_ON_PREFIX, gmx.getServerDomain(), bindInterface, port));
 		if(!gmx.getMBeanServerConnection().isRegistered(classLoaderOn)) {
-			String className = privateClassLoader ? PrivateMLet.class.getName() : MLet.class.getName(); 
-			gmx.getMBeanServerConnection().createMBean(className, classLoaderOn, new Object[]{getHttpCodeBaseURL(), true}, new String[]{URL[].class.getName(), boolean.class.getName()});			
+			if(privateClassLoader) {
+				ObjectName jbossULR3 = JMXHelper.objectName("JMImplementation:service=LoaderRepository,name=Default");
+				if(gmx.getMBeanServerConnection().isRegistered(jbossULR3)) {
+						gmx.getMBeanServerConnection().createMBean(PrivateMLet.class.getName(), classLoaderOn, jbossULR3, new Object[]{getHttpCodeBaseURL(), true}, new String[]{URL[].class.getName(), boolean.class.getName()});	
+				} else {
+					gmx.getMBeanServerConnection().createMBean(PrivateMLet.class.getName(), classLoaderOn, new Object[]{getHttpCodeBaseURL(), true}, new String[]{URL[].class.getName(), boolean.class.getName()});
+				}
+				
+			} else {
+				gmx.getMBeanServerConnection().createMBean(MLet.class.getName(), classLoaderOn);
+				for(URL url: getHttpCodeBaseURL()) {
+					gmx.getMBeanServerConnection().invoke(classLoaderOn, "addURL", new Object[]{url.toString()}, new String[]{String.class.getName()});
+				}				
+			}
 		}
 		if(!gmx.getMBeanServerConnection().isRegistered(mbeanServerOn)) {
-			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), mbeanServerOn, classLoaderOn);
+			URL clUrl = null;
+			try {
+				clUrl = new URL(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX).toString());
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to create remote MBeanServer classload URL", e);
+			}
+			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), mbeanServerOn, classLoaderOn, new Object[]{clUrl}, new String[]{URL.class.getName()});
 		}
 		gmx.installedRemote(classLoaderOn, mbeanServerOn);
 	}

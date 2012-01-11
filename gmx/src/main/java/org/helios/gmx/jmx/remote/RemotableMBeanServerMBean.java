@@ -24,6 +24,8 @@
  */
 package org.helios.gmx.jmx.remote;
 
+import java.net.URL;
+
 import groovy.lang.Closure;
 
 import javax.management.MBeanRegistration;
@@ -61,4 +63,42 @@ public interface RemotableMBeanServerMBean extends MBeanServer, MBeanRegistratio
 	 * @return the return value of the closure
 	 */
 	public Object invokeClosure(Closure<?> closure, Object arguments);	
+	
+	/**
+	 * The URL of the reverse class loader
+	 * @return the reverseClassLoadURL
+	 */
+	public URL getReverseClassLoadURL();
+
+	/**
+	 * This MBean's class loader name 
+	 * @return the classLoader
+	 */
+	public String getClassLoader();
+
+	/**
+	 * The reverse class loader host
+	 * @return the reverseClassLoadHost
+	 */
+	public String getReverseClassLoadHost();
+
+	/**
+	 * The reverse class loader port
+	 * @return the reverseClassLoadPort
+	 */
+	public int getReverseClassLoadPort();
+	
+	/**
+	 * Returns the JMX domain names of all located MBeanServers in this JVM
+	 * @return the JMX domain names of all located MBeanServers in this JVM
+	 */
+	public String[] getMBeanServerDomains();
+	
+	/**
+	 * Sets the reverse class loader URL
+	 * @param reverseClassLoadURL The URL of the reverse class loader
+	 */
+	public void setReverseClassLoadURL(URL reverseClassLoadURL);
+	
+	
 }

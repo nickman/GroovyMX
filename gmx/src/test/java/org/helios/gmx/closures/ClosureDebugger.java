@@ -26,27 +26,14 @@ package org.helios.gmx.closures;
 
 import groovy.lang.Binding;
 import groovy.lang.Closure;
-import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
-import groovyjarjarasm.asm.Opcodes;
 
-import java.lang.reflect.Method;
-import java.security.CodeSource;
-
-import org.codehaus.groovy.ast.ClassHelper;
-import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.ast.CompileUnit;
-import org.codehaus.groovy.ast.stmt.BlockStatement;
-import org.codehaus.groovy.classgen.GeneratorContext;
-import org.codehaus.groovy.control.CompilationFailedException;
-import org.codehaus.groovy.control.CompilationUnit;
-import org.codehaus.groovy.control.CompilerConfiguration;
-import org.codehaus.groovy.control.Phases;
-import org.codehaus.groovy.control.SourceUnit;
-import org.codehaus.groovy.control.CompilationUnit.PrimaryClassNodeOperation;
-import org.helios.gmx.classloading.ByteCodeRepository;
+import org.helios.gmx.Gmx;
 import org.helios.gmx.classloading.ReverseClassLoader;
+import org.helios.vm.VirtualMachine;
+import org.helios.vm.VirtualMachineBootstrap;
+import org.helios.vm.VirtualMachineDescriptor;
 import org.helios.vm.agent.LocalAgentInstaller;
 
 /**
@@ -86,7 +73,19 @@ public class ClosureDebugger {
 		clozure = null;
 		shell = null;
 		System.gc();
-		
+		VirtualMachineBootstrap.getInstance();
+		Gmx gmx = null;
+		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
+			if(vmd.displayName().toLowerCase().contains("org.jboss.main")) {
+			//if(vmd.displayName().toLowerCase().contains("jconsole")) {
+//			if(vmd.displayName().toLowerCase().contains(".h2.")) {
+				gmx = Gmx.attachInstance(vmd.id());
+				log("Connected" + gmx);
+			}
+		}		
+		gmx.installRemote(true);
+		try { Thread.currentThread().join(150000); } catch (Exception e) {}
+		gmx.close();
 	}
 	
 	

@@ -31,7 +31,9 @@ import groovy.lang.GroovyShell;
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
+import java.net.URL;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -47,6 +49,7 @@ import javax.management.MBeanException;
 import javax.management.MBeanInfo;
 import javax.management.MBeanRegistrationException;
 import javax.management.MBeanServer;
+import javax.management.MBeanServerFactory;
 import javax.management.NotCompliantMBeanException;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
@@ -71,7 +74,45 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	protected transient MBeanServer server = null;
 	/** The ObjectName this MBean is registered as */
 	protected ObjectName objectName = null;
+	/** The URL of the reverse class loader */
+	protected URL reverseClassLoadURL;
+	/** This MBean's class loader */
+	protected final ClassLoader classLoader;	
+	/** The reverse class loader host */
+	protected String reverseClassLoadHost;
+	/** The reverse class loader port */
+	protected int reverseClassLoadPort;
 	
+	
+	
+	/**
+	 * Creates a new RemotableMBeanServer
+	 * @param reverseClassLoadURL The URL of the reverse class loader
+	 */
+	public RemotableMBeanServer(URL reverseClassLoadURL) {
+		this.reverseClassLoadURL = reverseClassLoadURL;
+		classLoader = getClass().getClassLoader();
+		reverseClassLoadHost = this.reverseClassLoadURL.getHost(); 
+		reverseClassLoadPort = this.reverseClassLoadURL.getPort();
+	}
+	
+	/**
+	 * Creates a new RemotableMBeanServer
+	 */
+	public RemotableMBeanServer() {
+		classLoader = getClass().getClassLoader();
+	}
+	
+	/**
+	 * Sets the reverse class loader URL
+	 * @param reverseClassLoadURL The URL of the reverse class loader
+	 */
+	public void setReverseClassLoadURL(URL reverseClassLoadURL) {
+		this.reverseClassLoadURL = reverseClassLoadURL;
+		reverseClassLoadHost = this.reverseClassLoadURL.getHost(); 
+		reverseClassLoadPort = this.reverseClassLoadURL.getPort();
+	}
+
 	/**
 	 * Invokes the closure extracted from the passed byte array and returns the result
 	 * @param closureBytes The closure serialized as a byte array
@@ -127,6 +168,56 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 			throw new RuntimeException("Failed to invoke script", e);
 		}
 	}
+	
+	/**
+	 * The URL of the reverse class loader
+	 * @return the reverseClassLoadURL
+	 */
+	public URL getReverseClassLoadURL() {
+		return reverseClassLoadURL;
+	}
+
+	/**
+	 * This MBean's class loader name 
+	 * @return the classLoader
+	 */
+	public String getClassLoader() {
+		return classLoader.toString();
+	}
+
+	/**
+	 * The reverse class loader host
+	 * @return the reverseClassLoadHost
+	 */
+	public String getReverseClassLoadHost() {
+		return reverseClassLoadHost;
+	}
+
+	/**
+	 * The reverse class loader port
+	 * @return the reverseClassLoadPort
+	 */
+	public int getReverseClassLoadPort() {
+		return reverseClassLoadPort;
+	}
+	
+	
+	/**
+	 * Returns the JMX domain names of all located MBeanServers in this JVM
+	 * @return the JMX domain names of all located MBeanServers in this JVM
+	 */
+	public String[] getMBeanServerDomains() {
+		try {
+			Set<String> domains = new HashSet<String>();
+			for(MBeanServer server: MBeanServerFactory.findMBeanServer(null)) {
+				domains.add(server.getDefaultDomain()==null ? "null" : server.getDefaultDomain());
+			}
+			return domains.toArray(new String[domains.size()]);
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+			return new String[]{};
+		}
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -159,7 +250,7 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	@Override
 	public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
 		this.server = server;
-		objectName = name;
+		objectName = name;		
 		return name;
 	}	
 
@@ -655,5 +746,6 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 			throws InstanceNotFoundException, MBeanRegistrationException {
 		server.unregisterMBean(name);
 	}
+
 
 }
