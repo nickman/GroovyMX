@@ -25,9 +25,10 @@
 package org.helios.gmx.jmx.remote;
 
 import groovy.lang.Binding;
+import groovy.lang.Closure;
 import groovy.lang.GroovyShell;
-import groovy.lang.Script;
 
+import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.HashMap;
@@ -70,6 +71,43 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	protected transient MBeanServer server = null;
 	/** The ObjectName this MBean is registered as */
 	protected ObjectName objectName = null;
+	
+	/**
+	 * Invokes the closure extracted from the passed byte array and returns the result
+	 * @param closureBytes The closure serialized as a byte array
+	 * @param arguments optional arguments
+	 * @return the return value of the closure
+	 */
+	public Object invokeClosure(byte[] closureBytes, Object arguments) {
+		System.out.println("\n\tExtracting Closure from byte array:" + closureBytes.length + " Bytes\n");
+		Closure<?> closure = null;
+		try {
+			ByteArrayInputStream bais = new ByteArrayInputStream(closureBytes);
+			ObjectInputStream ois = new ObjectInputStream(bais);
+			closure = (Closure<?>)ois.readObject();
+			return invokeClosure(closure, arguments);
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+			throw new RuntimeException("Failed to extract closure form byte array", e);
+		}
+	}
+	
+	/**
+	 * Invokes the passed closure and returns the result
+	 * @param closure The closure
+	 * @param arguments optional arguments
+	 * @return the return value of the closure
+	 */
+	public Object invokeClosure(Closure<?> closure, Object arguments) {
+		try {
+			System.out.println("\n\tInvoking Closure\n");
+			Object val = closure.call(server);
+			return val;
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+			throw new RuntimeException("Failed to invoke closure", e);
+		}
+	}
 	
 	/**
 	 * Invokes the submitted script passing in the MBeanServer as a binding and returning the script's return value.

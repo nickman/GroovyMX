@@ -251,6 +251,9 @@ public class MetaMBean implements GroovyObject {
 	 * @return a [possibly empty] set of matching operation signatures
 	 */
 	protected Set<OperationSignature> getOpSigs(String name, int argCount) {
+		if(!operations.containsKey(name)) {
+			throw new RuntimeException("Operation name [" + name + "] was not found", new Throwable());
+		}
 		Set<OperationSignature> set = new HashSet<OperationSignature>();
 		TreeSet<OperationSignature> opSigs = operations.get(name);
 		for(OperationSignature os: opSigs) {
@@ -449,6 +452,22 @@ public class MetaMBean implements GroovyObject {
 	    	.append(objectName).append("]@")
 	    	.append(gmx.jvmName==null ? gmx.serverDomain : gmx.jvmName)
 	    	.toString();
+	}
+
+	/**
+	 * The JMX ObjectName of the MBean
+	 * @return the objectName
+	 */
+	public ObjectName getObjectName() {
+		return objectName;
+	}
+
+	/**
+	 * The MBean's MBeanInfo
+	 * @return the mbeanInfo
+	 */
+	public MBeanInfo getMbeanInfo() {
+		return mbeanInfo.get();
 	}
 
 }

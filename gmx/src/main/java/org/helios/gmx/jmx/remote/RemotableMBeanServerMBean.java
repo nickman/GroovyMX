@@ -24,6 +24,8 @@
  */
 package org.helios.gmx.jmx.remote;
 
+import groovy.lang.Closure;
+
 import javax.management.MBeanRegistration;
 import javax.management.MBeanServer;
 
@@ -35,6 +37,15 @@ import javax.management.MBeanServer;
  * <p><code>org.helios.gmx.jmx.remote.RemotableMBeanServerMBean</code></p>
  */
 public interface RemotableMBeanServerMBean extends MBeanServer, MBeanRegistration {
+	
+	/**
+	 * Invokes the closure extracted from the passed byte array and returns the result
+	 * @param closureBytes The closure serialized as a byte array
+	 * @param arguments optional arguments
+	 * @return the return value of the closure
+	 */
+	public Object invokeClosure(byte[] closureBytes, Object arguments);
+	
 	/**
 	 * Invokes the submitted script passing in the MBeanServer as a binding and returning the script's return value.
 	 * @param script The script to execute.
@@ -42,4 +53,12 @@ public interface RemotableMBeanServerMBean extends MBeanServer, MBeanRegistratio
 	 * @return the script's return value
 	 */
 	public Object invokeScript(String script, Object...args);
+	
+	/**
+	 * Invokes the passed closure and returns the result
+	 * @param closure The closure
+	 * @param arguments optional arguments
+	 * @return the return value of the closure
+	 */
+	public Object invokeClosure(Closure<?> closure, Object arguments);	
 }

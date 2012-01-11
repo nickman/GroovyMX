@@ -26,15 +26,20 @@ package org.helios.gmx;
 
 import groovy.lang.Closure;
 import groovy.lang.GroovyObject;
+import groovy.lang.GroovyShell;
 import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
+import groovy.lang.Script;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.management.Attribute;
@@ -117,12 +122,59 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	/** The platform MBeanServer Default Domain Name */
 	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
 	
-	/** The standard JMX ObjectName of the remotable MBeanServer MBean */
-	public static final ObjectName REMOTABLE_MBEANSERVER_ON = JMXHelper.objectName("org.helios.gmx:service=RemotableMBeanServer");
+	/** The standard JMX ObjectName prefix of the remotable MBeanServer MBean */
+	public static final String REMOTE_MBEANS_ON_PREFIX = "org.helios.gmx:service=%s,host=%s,port=%s";
+	
+	/** A set of Gmx references that will be closed and cleared on shutdown */
+	public static final Set<WeakReference<Gmx>> GMX_REFERENCES = new CopyOnWriteArraySet<WeakReference<Gmx>>();
 	
 	/** This JVM's PID */
 	public static final String PID = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+	
+	static {
+		Runtime.getRuntime().addShutdownHook(new Thread(){
+			public void run() {
+				System.out.println("Cleaning up Gmx References...");
+				int cnt = 0;
+				for(WeakReference<Gmx> ref: GMX_REFERENCES) {
+					Gmx gmx = ref.get();
+					if(gmx!=null) {
+						gmx.close();
+						cnt++;
+					}
+				}
+				GMX_REFERENCES.clear();
+				System.out.println("Cleaned up " + cnt + " Gmx References");
+			}
+		});
+	}
 
+	public static void main(String[] args) {
+		try {
+			ReverseClassLoader.getInstance();
+			GroovyShell shell = new GroovyShell();
+			Script script = shell.parse(new File(System.getProperty("user.home") + File.separator + "GMXRemotingClosure.groovy"));
+			log("Script:" + script);
+			VirtualMachineBootstrap.getInstance();
+			for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
+				if(vmd.displayName().toLowerCase().contains("jconsole")) {
+					String pid = vmd.id();
+					log("Connecting to [" + pid + "]");
+					script.getBinding().setVariable("args", new String[]{pid});
+					//script.getBinding().setVariable("bytecode", ReverseClassLoader.getInstance().);
+					script.run();
+				}
+			}
+			
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+		}
+	}
+	
+	public static void log(Object msg) {
+		System.out.println(msg);
+	}
+	
 	
 	/**
 	 * Creates a new Gmx
@@ -141,6 +193,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		try {
 			this.jvmName = (String)this.mbeanServerConnection.getAttribute(JMXHelper.objectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name");
 		} catch (Exception e) {}		
+		GMX_REFERENCES.add(new WeakReference<Gmx>(this));
 	}
 	
 	/**
@@ -167,7 +220,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		serverDomain = this.mbeanServerConnection.getDefaultDomain();
 		try {
 			this.jvmName = (String)this.mbeanServerConnection.getAttribute(JMXHelper.objectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name");
-		} catch (Exception e) {}		
+		} catch (Exception e) {}	
+		GMX_REFERENCES.add(new WeakReference<Gmx>(this));
 		
 	}
 	
@@ -300,11 +354,25 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		return connector!=null;
 	}
 	
+
+	
 	/**
 	 * Closes a remote connection.
 	 * If this is not a remote Gmx, or the connection is already closed, the command does nothing.
 	 */
 	public void close() {
+		if(remoteClassLoader!=null) {
+			try { 
+				mbeanServerConnection.unregisterMBean(remoteClassLoader.getObjectName());
+				remoteClassLoader=null;
+			} catch (Exception e) {}
+		}
+		if(remotedMBeanServer!=null) {
+			try { 
+				mbeanServerConnection.unregisterMBean(remotedMBeanServer.getObjectName());
+				remotedMBeanServer=null;
+			} catch (Exception e) {}
+		}		
 		if(connector!=null) {			
 			try { connector.close(); } catch (Exception e) {}
 			connected.set(false);
@@ -338,8 +406,18 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @return this Gmx
 	 */
 	public Gmx installRemote() {
-		ReverseClassLoader.getInstance().installRemotableMBeanServer(this);
+		ReverseClassLoader.getInstance().installRemotableMBeanServer(this, true);
 		return this;
+	}
+	
+	/**
+	 * Callback from the reverse class loader providing the ObjectNames of the insalled remotes.
+	 * @param remoteClassLoaderOn The JMX ObjectName of the remote classloader
+	 * @param remoteMBeanServerOn The JMX ObjectName of the remote MBeanServer
+	 */
+	public void installedRemote(ObjectName remoteClassLoaderOn, ObjectName remoteMBeanServerOn) {
+		remoteClassLoader = mbean(remoteClassLoaderOn);
+		remotedMBeanServer = mbean(remoteMBeanServerOn);
 	}
 	
 	/**
@@ -347,7 +425,19 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @return a MetaMBean
 	 */
 	public MetaMBean gmxRemote() {
-		return mbean(REMOTABLE_MBEANSERVER_ON);
+		return remotedMBeanServer;
+	}
+	
+	/**
+	 * Invokes a closure remotely in the foreign MBeanServer
+	 * @param closure The closure to execute
+	 * @param arguments The closure arguments
+	 * @return The return value of the closure execution.
+	 */
+	public Object invokeRemoteClosure(Closure<?> closure, Object arguments) {
+		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
+		ReverseClassLoader.getInstance().registerClosure(closure);
+		return remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, arguments});
 	}
 	
 	// =========================================================================================
