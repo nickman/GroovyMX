@@ -25,23 +25,25 @@
 package org.helios.gmx.util;
 
 import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
+import java.lang.ref.SoftReference;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+
+
 /**
- * <p>Title: DequeuedWeakReferenceValueMap</p>
- * <p>Description: A weak reference wrapped map that has the reference queue cleared and actively processed by a thread</p> 
+ * <p>Title: DequeuedSoftReferenceValueMap</p>
+ * <p>Description: A soft reference wrapped map that has the reference queue cleared and actively processed by a thread</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>org.helios.gmx.util.DequeuedWeakReferenceValueMap</code></p>
+ * <p><code>org.helios.gmx.util.DequeuedSoftReferenceValueMap</code></p>
  * @param <K> The type of the key
- * @param <V> The value of the key wrapped in a weak reference
+ * @param <V> The value of the key wrapped in a soft reference
  */
 
-public class DequeuedWeakReferenceValueMap<K, V> {
+public class DequeuedSoftReferenceValueMap<K, V> {
 	/** The inner map of weak reference values */
-	private final Map<K, KeyAwareWeakReferenceValue> referenceMap = new ConcurrentHashMap<K, KeyAwareWeakReferenceValue>();
+	private final Map<K, KeyAwareSoftReferenceValue> referenceMap = new ConcurrentHashMap<K, KeyAwareSoftReferenceValue>();
 	
 	/** The reference queue that will be processed by the queue processor thread */
 	private static final ReferenceQueue<?> REF_Q = new ReferenceQueue<Object>();
@@ -62,7 +64,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 		}
 	};
 	/** The reference queue processing thread */
-	private static final Thread REF_Q_PROCESSOR = new Thread(REF_Q_RUNNABLE, DequeuedWeakReferenceValueMap.class.getSimpleName() + " ClearingThread");
+	private static final Thread REF_Q_PROCESSOR = new Thread(REF_Q_RUNNABLE, DequeuedSoftReferenceValueMap.class.getSimpleName() + " ClearingThread");
 
 	static {
 		REF_Q_PROCESSOR.setDaemon(true);
@@ -78,7 +80,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 */
 	@SuppressWarnings("unchecked")
 	public V put(K key, V value, Runnable...runnables) {
-		KeyAwareWeakReferenceValue oldRef =  referenceMap.put(key, new KeyAwareWeakReferenceValue(key, value, (ReferenceQueue<? super V>) REF_Q, runnables));
+		KeyAwareSoftReferenceValue oldRef =  referenceMap.put(key, new KeyAwareSoftReferenceValue(key, value, (ReferenceQueue<? super V>) REF_Q, runnables));
 		if(oldRef!=null) {
 			return oldRef.get();
 		}
@@ -91,7 +93,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * @return The value or null if not found
 	 */
 	public V get(K key) {
-		KeyAwareWeakReferenceValue ref =  referenceMap.get(key);
+		KeyAwareSoftReferenceValue ref =  referenceMap.get(key);
 		if(ref!=null) {
 			return ref.get();
 		}
@@ -104,7 +106,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * @return true if the key is present in the map, false otherwise
 	 */
 	public boolean containsKey(K key) {
-		KeyAwareWeakReferenceValue ref =  referenceMap.get(key);
+		KeyAwareSoftReferenceValue ref =  referenceMap.get(key);
 		return ref!=null && !ref.isEnqueued();
 	}
 	
@@ -114,7 +116,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	 * @return Ther removed value or null
 	 */
 	public V remove(K key) {
-		KeyAwareWeakReferenceValue ref = referenceMap.remove(key);
+		KeyAwareSoftReferenceValue ref = referenceMap.remove(key);
 		if(ref!=null) {
 			return ref.get();
 		}
@@ -123,27 +125,27 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 	
 	
 	/**
-	 * <p>Title: KeyAwareWeakReferenceValue</p>
-	 * <p>Description: An extension of {@link WeakReference} that retains the associated key so it can be cleared from the map it is registered in.</p> 
+	 * <p>Title: KeyAwareSoftReferenceValue</p>
+	 * <p>Description: An extension of {@link SoftReference} that retains the associated key so it can be cleared from the map it is registered in.</p> 
 	 * <p>Company: Helios Development Group LLC</p>
 	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
-	 * <p><code>org.helios.gmx.util.DequeuedWeakReferenceValueMap.KeyAwareWeakReferenceValue</code></p>
+	 * <p><code>org.helios.gmx.util.DequeuedSoftReferenceValueMap.KeyAwareSoftReferenceValue</code></p>
 	 * @param K The type of the key
-	 * @param V The value of the key wrapped in a weak reference
+	 * @param V The value of the key wrapped in a soft reference
 	 */
-	public class KeyAwareWeakReferenceValue extends WeakReference<V> implements Runnable {
-		/** The key used to clear the map entry in {@link DequeuedWeakReferenceValueMap#referenceMap} */
+	public class KeyAwareSoftReferenceValue extends SoftReference<V> implements Runnable {
+		/** The key used to clear the map entry in {@link DequeuedSoftReferenceValueMap#referenceMap} */
 		private final K key;
 		/** Runnable overrides */
 		private final Runnable[] runnables;
 		
 		/**
-		 * Creates a new KeyAwareWeakReferenceValue
-		 * @param key The key associated with the weakly referenced value
-		 * @param value The value to be held as a weak reference
+		 * Creates a new KeyAwareSoftReferenceValue
+		 * @param key The key associated with the softly referenced value
+		 * @param value The value to be held as a soft reference
 		 * @param refQueue The reference queue
 		 */
-		public KeyAwareWeakReferenceValue(K key, V value, ReferenceQueue<? super V> refQueue, Runnable...runnables) {
+		public KeyAwareSoftReferenceValue(K key, V value, ReferenceQueue<? super V> refQueue, Runnable...runnables) {
 			super(value, refQueue);
 			this.key =key;
 			this.runnables = (runnables==null || runnables.length<1) ? null : runnables;
@@ -151,7 +153,7 @@ public class DequeuedWeakReferenceValueMap<K, V> {
 		
 		/**
 		 * {@inheritDoc}
-		 * <p>Runnable called by the reference queue processor to clear the entry in {@link DequeuedWeakReferenceValueMap#referenceMap}
+		 * <p>Runnable called by the reference queue processor to clear the entry in {@link DequeuedSoftReferenceValueMap#referenceMap}
 		 * @see java.lang.Runnable#run()
 		 */
 		@Override
