@@ -1,0 +1,14 @@
+import org.helios.gmx.*;
+import java.lang.management.*;
+import org.helios.vm.agent.LocalAgentInstaller;
+import org.helios.vm.VirtualMachineBootstrap;
+import org.helios.gmx.classloading.ReverseClassLoader;
+println "=== Finding Attach API ===";
+VirtualMachineBootstrap.findAttachAPI();
+println "==== Starting Reverse ClassLoader ===\n\tJava Home:${System.getProperty('java.home')}\n";
+revClassLoader = ReverseClassLoader.getInstance();
+//clazz = Class.forName("org.helios.gmx.classloading.ReverseClassLoader");
+//println "Class:$clazz";
+//clazz.getDeclaredMethod("getInstance").invoke(null);
+println "=== Start Complete ===";
+Thread.currentThread().join();
