@@ -24,7 +24,7 @@
  */
 package org.helios.gmx.classloading;
 
-import groovy.lang.Closure;
+
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
@@ -36,12 +36,8 @@ import java.lang.management.ManagementFactory;
 import java.net.URL;
 import java.nio.channels.ServerSocketChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -56,7 +52,6 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.codehaus.groovy.runtime.GeneratedClosure;
 import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
@@ -68,6 +63,7 @@ import org.helios.gmx.Gmx;
 import org.helios.gmx.jmx.remote.RemotableMBeanServer;
 import org.helios.gmx.util.FreePortFinder;
 import org.helios.gmx.util.JMXHelper;
+import org.helios.gmx.util.URLHelper;
 
 
 
@@ -101,6 +97,8 @@ public class ReverseClassLoader extends AbstractHandler  {
 	protected final URL codeSourceUrl = getClass().getProtectionDomain().getCodeSource().getLocation();
 	/** The stats MBeanContainer */
 	protected MBeanContainer container;
+	/** The base URL of the classloader server */
+	protected URL baseURL = null;
 	/** A set of dynamically created class loaders that can load classes that may be requested by a remote class loader */
 	protected final Map<ClassLoader, ClassLoader> classLoaders = new WeakHashMap<ClassLoader, ClassLoader>();
 	/** A map of closure bytecode byte arrays keyed by the class resource name */
@@ -165,34 +163,34 @@ public class ReverseClassLoader extends AbstractHandler  {
 		return instance;
 	}
 	
-	/**
-	 * Indexes the class name of the passed closure class
-	 * @param closure The closure to register
-	 */
-	public void registerClosure(Closure<?> closure) {
-		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
-		Class<? extends Closure> closureClass = closure.getClass();
-		if(GeneratedClosure.class.isAssignableFrom(closureClass)) {
-			
-			byte[] bytecode = byteCodeRepo.getByteCode(closureClass);
-			if(bytecode!=null) {
-				return;
-				//throw new RuntimeException("Failed to get bytecode for GeneratedClosure class [" + closureClass.getName() + "]", new Throwable());
-			}
-			Set<Class<?>> nestedClasses = new HashSet<Class<?>>(Arrays.asList(closureClass.getDeclaredClasses()));
-			Collections.addAll(nestedClasses, closureClass.getClasses());
-			for(Class<?> clazz: nestedClasses) {
-				if(GeneratedClosure.class.isAssignableFrom(clazz)) {
-					bytecode = byteCodeRepo.getByteCode(clazz);
-					if(bytecode==null) {
-						throw new RuntimeException("Failed to get bytecode for GeneratedClosure class [" + closureClass.getName() + "]", new Throwable());
-					}										
-				}
-			}
-		} else {
-			System.out.println("Not a generated closure [" + closure.getClass().getName() + "]");
-		}
-	}
+//	/**
+//	 * Indexes the class name of the passed closure class
+//	 * @param closure The closure to register
+//	 */
+//	public void registerClosure(Closure<?> closure) {
+//		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
+//		Class<? extends Closure> closureClass = closure.getClass();
+//		if(GeneratedClosure.class.isAssignableFrom(closureClass)) {
+//			
+//			byte[] bytecode = byteCodeRepo.getByteCode(closureClass);
+//			if(bytecode!=null) {
+//				return;
+//				//throw new RuntimeException("Failed to get bytecode for GeneratedClosure class [" + closureClass.getName() + "]", new Throwable());
+//			}
+//			Set<Class<?>> nestedClasses = new HashSet<Class<?>>(Arrays.asList(closureClass.getDeclaredClasses()));
+//			Collections.addAll(nestedClasses, closureClass.getClasses());
+//			for(Class<?> clazz: nestedClasses) {
+//				if(GeneratedClosure.class.isAssignableFrom(clazz)) {
+//					bytecode = byteCodeRepo.getByteCode(clazz);
+//					if(bytecode==null) {
+//						throw new RuntimeException("Failed to get bytecode for GeneratedClosure class [" + closureClass.getName() + "]", new Throwable());
+//					}										
+//				}
+//			}
+//		} else {
+//			System.out.println("Not a generated closure [" + closure.getClass().getName() + "]");
+//		}
+//	}
 	
 	/**
 	 * Returns the bytecode of the class matching the passed resource class name
@@ -271,6 +269,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 			e.printStackTrace(System.err);
 		}
 		startServer();
+		baseURL = URLHelper.url(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX));
 	}
 	
 	/**
@@ -343,32 +342,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 		ReverseClassLoader rcl = ReverseClassLoader.getInstance();
 		rcl.addDynamicResource("file:/home/nwhitehead/services/jboss/jboss-5.1.0.GA/docs/examples/jmx/ejb-management.jar");
 		try { Thread.currentThread().join(); } catch (Exception e) {}
-		
-		/*
-			public static void log(Object msg) {
-				System.out.println(msg);
-			}
-			
-			public static void main(String[] args) {
-				log("Closure Test");
-				LocalAgentInstaller.getInstrumentation(3000);
-				GroovyShell shell = new GroovyShell();
-				String scriptTxt = "def clozure = { println 'Hello World'; }; return clozure;";
-				Script script = shell.parse(scriptTxt);
-				Closure<?> clozure = (Closure<?>)script.run();
-				log("Acquired Clozure [" + clozure.getClass().getName() + "]");
-				AgentInstrumentationMBean remotifier = MBeanServerInvocationHandler.newProxyInstance(ManagementFactory.getPlatformMBeanServer(), AgentInstrumentation.AGENT_INSTR_ON, AgentInstrumentationMBean.class, false);
 				
-				byte[] clozureBytes = remotifier.getByteCode(clozure.getClass());
-				if(clozureBytes!=null) {
-					log("Clozure Bytes:" + clozureBytes.length + " bytes");
-				} else {
-					log("Failed to get Closure Bytes");
-				}
-				
-			}		
-		 */
-		
 	}
 	
 	/**
@@ -392,7 +366,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 			String resource = target.replace(HTTP_URI_PREFIX, "");
 			if(dynamicResources.containsKey(resource)) {
 				URL url = dynamicResources.get(resource);
-				classBytes = getBytesFromURL(url);
+				classBytes = URLHelper.getBytesFromURL(url);
 			} else {
 				classBytes = getClassBytes(resource);
 			}
@@ -431,29 +405,7 @@ public class ReverseClassLoader extends AbstractHandler  {
         baseRequest.setHandled(true);
 	}
 	
-	/**
-	 * Reads trhe byte stream from a URL
-	 * @param url The URL to read from
-	 * @return the read byte array
-	 */
-	public static byte[] getBytesFromURL(URL url) {
-		InputStream is = null;
-		try {
-			is = url.openStream();
-			ByteArrayOutputStream baos = new ByteArrayOutputStream(is.available());
-			byte[] buffer = new byte[8092];
-			int bytesRead = -1;
-			while((bytesRead = is.read(buffer))!=-1) {
-				baos.write(buffer, 0, bytesRead);
-			}
-			baos.flush();
-			return baos.toByteArray();
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to read from URL [" + url + "]", e);
-		} finally {
-			if(is!=null) try { is.close(); } catch (Exception e) {}
-		}
-	}
+	
 	
 	protected void log(Object msg) {
 		System.out.println(msg);
@@ -494,13 +446,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 			}
 		}
 		if(!gmx.getMBeanServerConnection().isRegistered(mbeanServerOn)) {
-			URL clUrl = null;
-			try {
-				clUrl = new URL(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX).toString());
-			} catch (Exception e) {
-				throw new RuntimeException("Failed to create remote MBeanServer classload URL", e);
-			}
-			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), mbeanServerOn, classLoaderOn, new Object[]{clUrl}, new String[]{URL.class.getName()});
+			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), mbeanServerOn, classLoaderOn, new Object[]{baseURL}, new String[]{URL.class.getName()});
 		}
 		gmx.installedRemote(classLoaderOn, mbeanServerOn);
 	}
@@ -552,11 +498,15 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 */
 	public void addDynamicResource(String resourceURL) {
 		if(resourceURL==null) throw new IllegalArgumentException("The passed URL was null", new Throwable());
-		try {
-			addDynamicResource(new URL(resourceURL));
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to add resource URL [" + resourceURL + "]", e);
-		}
+		addDynamicResource(URLHelper.url(resourceURL));
+	}
+
+	/**
+	 * Returns the base classloading URL
+	 * @return the baseURL
+	 */
+	public URL getBaseURL() {
+		return baseURL;
 	}
 	
 	

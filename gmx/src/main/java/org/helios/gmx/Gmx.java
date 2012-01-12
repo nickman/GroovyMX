@@ -449,7 +449,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public Object invokeRemoteClosure(Closure<?> closure, Object arguments) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
-		ReverseClassLoader.getInstance().registerClosure(closure);
+		//ReverseClassLoader.getInstance().registerClosure(closure);
 		return remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, arguments});
 	}
 	
