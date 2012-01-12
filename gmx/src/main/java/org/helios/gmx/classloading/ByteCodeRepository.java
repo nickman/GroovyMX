@@ -238,12 +238,12 @@ public class ByteCodeRepository implements ClassFileTransformer {
 		if(classBeingRedefined==null) {
 			if(loader instanceof GroovyClassLoader && isGeneratedClosure(bytecode)) {
 				put(className, loader, bytecode);
-				//System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");
+				System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");
 			}
 		} else {
 			if(GeneratedClosure.class.isAssignableFrom(classBeingRedefined)) {
 				put(classBeingRedefined, bytecode);
-				//System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");				
+				System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");				
 			}			
 		}
 		return bytecode;

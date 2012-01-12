@@ -66,7 +66,7 @@ public class ClosureDebugger {
 		Closure clozure = (Closure)binding.getVariables().get("clozure");
 		clozure.call();
 		log("Getting Byte Code");
-		byte[] bytecode = ReverseClassLoader.getInstance().getByteCodeFromResource(clozure.getClass().getName().replace('.', '/') + ".class");
+		byte[] bytecode = ReverseClassLoader.getInstance().getByteCode(clozure.getClass());
 		log("Byte Code:" + bytecode);
 		binding = null;
 		script = null;
@@ -74,15 +74,17 @@ public class ClosureDebugger {
 		shell = null;
 		System.gc();
 		VirtualMachineBootstrap.getInstance();
+
 		Gmx gmx = null;
-		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
-			if(vmd.displayName().toLowerCase().contains("org.jboss.main")) {
-			//if(vmd.displayName().toLowerCase().contains("jconsole")) {
-//			if(vmd.displayName().toLowerCase().contains(".h2.")) {
-				gmx = Gmx.attachInstance(vmd.id());
-				log("Connected" + gmx);
-			}
-		}		
+		gmx = Gmx.remote("service:jmx:rmi://127.0.0.1/jndi/rmi://127.0.0.1:1090/jmxconnector");
+//		for(VirtualMachineDescriptor vmd: VirtualMachine.list()) {
+////			if(vmd.displayName().toLowerCase().contains("org.jboss.main")) {
+//			if(vmd.displayName().toLowerCase().contains("jconsole")) {
+////			if(vmd.displayName().toLowerCase().contains(".h2.")) {
+//				gmx = Gmx.attachInstance(vmd.id());
+//				log("Connected" + gmx);
+//			}
+//		}		
 		gmx.installRemote(true);
 		try { Thread.currentThread().join(150000); } catch (Exception e) {}
 		gmx.close();

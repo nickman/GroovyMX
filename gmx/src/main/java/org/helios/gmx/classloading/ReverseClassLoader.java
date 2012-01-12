@@ -43,12 +43,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
 
-import javax.management.Attribute;
 import javax.management.ObjectName;
 import javax.management.loading.MLet;
 import javax.management.loading.PrivateMLet;
@@ -105,6 +105,8 @@ public class ReverseClassLoader extends AbstractHandler  {
 	protected final Map<ClassLoader, ClassLoader> classLoaders = new WeakHashMap<ClassLoader, ClassLoader>();
 	/** A map of closure bytecode byte arrays keyed by the class resource name */
 	protected final ByteCodeRepository byteCodeRepo = ByteCodeRepository.getInstance();
+	/** A map of local file system resources that can be served by the loader keyed by the URI */
+	protected final Map<String, URL> dynamicResources = new ConcurrentHashMap<String, URL>();
 	
 	
 	/** The http classloading URI prefix */
@@ -338,7 +340,9 @@ public class ReverseClassLoader extends AbstractHandler  {
 	}
 	
 	public static void main(String[] args) {
-		new ReverseClassLoader().startServer();
+		ReverseClassLoader rcl = ReverseClassLoader.getInstance();
+		rcl.addDynamicResource("file:/home/nwhitehead/services/jboss/jboss-5.1.0.GA/docs/examples/jmx/ejb-management.jar");
+		try { Thread.currentThread().join(); } catch (Exception e) {}
 		
 		/*
 			public static void log(Object msg) {
@@ -385,7 +389,13 @@ public class ReverseClassLoader extends AbstractHandler  {
 		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX));
 		byte[] classBytes = null;
 		if(!jarRequest) {
-			classBytes = getClassBytes(target.replace(HTTP_URI_PREFIX, ""));
+			String resource = target.replace(HTTP_URI_PREFIX, "");
+			if(dynamicResources.containsKey(resource)) {
+				URL url = dynamicResources.get(resource);
+				classBytes = getBytesFromURL(url);
+			} else {
+				classBytes = getClassBytes(resource);
+			}
 		}
 		OutputStream os = response.getOutputStream();
 		GZIPOutputStream gzipOut = null;
@@ -421,6 +431,30 @@ public class ReverseClassLoader extends AbstractHandler  {
         baseRequest.setHandled(true);
 	}
 	
+	/**
+	 * Reads trhe byte stream from a URL
+	 * @param url The URL to read from
+	 * @return the read byte array
+	 */
+	public static byte[] getBytesFromURL(URL url) {
+		InputStream is = null;
+		try {
+			is = url.openStream();
+			ByteArrayOutputStream baos = new ByteArrayOutputStream(is.available());
+			byte[] buffer = new byte[8092];
+			int bytesRead = -1;
+			while((bytesRead = is.read(buffer))!=-1) {
+				baos.write(buffer, 0, bytesRead);
+			}
+			baos.flush();
+			return baos.toByteArray();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to read from URL [" + url + "]", e);
+		} finally {
+			if(is!=null) try { is.close(); } catch (Exception e) {}
+		}
+	}
+	
 	protected void log(Object msg) {
 		System.out.println(msg);
 	}
@@ -442,15 +476,16 @@ public class ReverseClassLoader extends AbstractHandler  {
 	public void installRemotableMBeanServer(Gmx gmx, boolean privateClassLoader) {		
 		ObjectName classLoaderOn = JMXHelper.objectName(String.format(Gmx.REMOTE_MLET_ON_PREFIX,  bindInterface, port));
 		ObjectName mbeanServerOn = JMXHelper.objectName(String.format(Gmx.REMOTE_MBEANSERVER_ON_PREFIX, gmx.getServerDomain(), bindInterface, port));
+		ObjectName jbossULR3 = JMXHelper.objectName("JMImplementation:service=LoaderRepository,name=Default");
+		if(gmx.getMBeanServerConnection().isRegistered(jbossULR3)) {
+			for(URL url: getHttpCodeBaseURL()) {
+				try { gmx.getMBeanServerConnection().invoke(jbossULR3, "newClassLoader", new Object[]{url, true}, new String[]{URL.class.getName(), boolean.class.getName()}); } catch (Exception e) {}
+			}
+			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), mbeanServerOn);
+		}
 		if(!gmx.getMBeanServerConnection().isRegistered(classLoaderOn)) {
-			if(privateClassLoader) {
-				ObjectName jbossULR3 = JMXHelper.objectName("JMImplementation:service=LoaderRepository,name=Default");
-				if(gmx.getMBeanServerConnection().isRegistered(jbossULR3)) {
-						gmx.getMBeanServerConnection().createMBean(PrivateMLet.class.getName(), classLoaderOn, jbossULR3, new Object[]{getHttpCodeBaseURL(), true}, new String[]{URL[].class.getName(), boolean.class.getName()});	
-				} else {
-					gmx.getMBeanServerConnection().createMBean(PrivateMLet.class.getName(), classLoaderOn, new Object[]{getHttpCodeBaseURL(), true}, new String[]{URL[].class.getName(), boolean.class.getName()});
-				}
-				
+			if(privateClassLoader) {				
+				gmx.getMBeanServerConnection().createMBean(PrivateMLet.class.getName(), classLoaderOn, new Object[]{getHttpCodeBaseURL(), true}, new String[]{URL[].class.getName(), boolean.class.getName()});
 			} else {
 				gmx.getMBeanServerConnection().createMBean(MLet.class.getName(), classLoaderOn);
 				for(URL url: getHttpCodeBaseURL()) {
@@ -498,6 +533,32 @@ public class ReverseClassLoader extends AbstractHandler  {
 	public byte[] getByteCodeFromResource(String className) {
 		return byteCodeRepo.getByteCodeFromResource(className);
 	}
+	
+	/**
+	 * Adds a dynamic resource
+	 * @param resourceURL The URL of the resource to serve
+	 */
+	public void addDynamicResource(URL resourceURL) {
+		if(resourceURL==null) throw new IllegalArgumentException("The passed URL was null", new Throwable());
+		String[] frags = resourceURL.getPath().split("/");
+		String key = frags[frags.length-1];
+		dynamicResources.put(key, resourceURL);
+		log("Added Dynamic Resource [" + key + "]");
+	}
+	
+	/**
+	 * Adds a dynamic resource
+	 * @param resourceURL The URL of the resource to serve
+	 */
+	public void addDynamicResource(String resourceURL) {
+		if(resourceURL==null) throw new IllegalArgumentException("The passed URL was null", new Throwable());
+		try {
+			addDynamicResource(new URL(resourceURL));
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to add resource URL [" + resourceURL + "]", e);
+		}
+	}
+	
 	
 	
 

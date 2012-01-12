@@ -149,7 +149,7 @@ public class LocalAgentInstaller  {
 						Manifest mf = new Manifest(bais);
 						fos = new FileOutputStream(tmpFile, false);
 						jos = new JarOutputStream(fos, mf);
-						addClassesToJar(jos, AgentInstrumentation.class, AgentInstrumentationMBean.class);
+						addClassesToJar(jos, AgentInstrumentation.class, AgentInstrumentationMBean.class, JMXHelper.class);
 						jos.flush();
 						jos.close();
 						fos.flush();
