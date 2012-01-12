@@ -52,6 +52,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.codehaus.groovy.runtime.GeneratedClosure;
 import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
@@ -64,6 +65,7 @@ import org.helios.gmx.jmx.remote.RemotableMBeanServer;
 import org.helios.gmx.util.FreePortFinder;
 import org.helios.gmx.util.JMXHelper;
 import org.helios.gmx.util.URLHelper;
+import org.helios.vm.agent.AgentInstrumentation;
 
 
 
@@ -111,6 +113,9 @@ public class ReverseClassLoader extends AbstractHandler  {
 	public static final String HTTP_URI_PREFIX = "/classloader/";
 	/** The http classloading URI suffix for jar loading */
 	public static final String HTTP_URI_JAR_SUFFIX = "gmx.jar";
+	/** The http classloading URI suffix for jboss aar loading */
+	public static final String HTTP_URI_SAR_SUFFIX = "gmx.sar";
+	
 	
 	/** The server's thread group */
 	private static final ThreadGroup threadGroup = new ThreadGroup("ReverseClassLoaderThreadGroup");
@@ -197,6 +202,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 * @param className the resource class name
 	 * @return the bytecode of the named class.
 	 */
+	@SuppressWarnings("unchecked")
 	protected byte[] getClassBytes(String className) {
 		if(className==null) throw new IllegalArgumentException("The passed class name was null", new Throwable());
 		byte[] bytecode = byteCodeRepo.getByteCodeFromResource(className);
@@ -220,15 +226,32 @@ public class ReverseClassLoader extends AbstractHandler  {
 					}									
 				} else {
 					Class<?> clazz = Class.forName(className.replace(".class", "").replace('/', '.'), true, cl);
-					ObjectOutputStream oos = new ObjectOutputStream(baos);
-					oos.writeObject(clazz);
-					oos.flush();
+					if(GeneratedClosure.class.isAssignableFrom(clazz)) {
+						baos.write(byteCodeRepo.getByteCode(clazz));
+					} else {
+						ObjectOutputStream oos = new ObjectOutputStream(baos);
+						oos.writeObject(clazz);
+						oos.flush();
+					}
 				}
 				baos.flush();
 				return baos.toByteArray();
 			} catch (Exception e) {				
 			} finally {
 				if(is!=null) try { is.close(); } catch (Exception e) {}
+			}
+		}
+		// This is a last ditch effort to find a closure class compiled before the class transformer install.
+		// It could be quite slow.
+		String clazzName = className.replace(".class", "").replace('/', '.');
+		Class[] iclasses = {};
+		try {
+			iclasses = (Class[])ManagementFactory.getPlatformMBeanServer().getAttribute(AgentInstrumentation.AGENT_INSTR_ON, "AllLoadedClasses");
+		} catch (Exception e) {}
+		log("Checking [" + iclasses.length + "] Instrumentation classes for [" + clazzName + "]");
+		for(Class<?> clazz: iclasses) {
+			if(clazz.getName().equals(clazzName)) {
+				return byteCodeRepo.getByteCode(clazz);
 			}
 		}
 		//throw new RuntimeException("Failed to load class [" + className + "]", new Throwable().fillInStackTrace());
@@ -359,8 +382,8 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 */
 	@Override
 	public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-		log("Request Target [" + target + "] \n\tfrom [" + request.getRemoteAddr() + ":" + request.getRemotePort() + "]");
-		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX));
+		log("Request Target " + request.getMethod() + " [" + target + "] \n\tfrom [" + request.getRemoteAddr() + ":" + request.getRemotePort() + "]");
+		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX)) || (target.equals(HTTP_URI_PREFIX + HTTP_URI_SAR_SUFFIX));		
 		byte[] classBytes = null;
 		if(!jarRequest) {
 			String resource = target.replace(HTTP_URI_PREFIX, "");
@@ -392,6 +415,12 @@ public class ReverseClassLoader extends AbstractHandler  {
         		os.write(jarContent);
         	}
         } else {
+        	if(classBytes==null) {
+        		response.sendError(404, "Class Not Found [" + target + "]");
+        		baseRequest.setHandled(true);
+        		log("ERROR: Sent 404 for [" + target + "]");
+        		return;
+        	}
         	response.setContentLength(classBytes.length);
         	if(gzipOut!=null) {
         		gzipOut.write(classBytes);

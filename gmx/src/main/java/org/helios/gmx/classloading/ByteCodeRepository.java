@@ -39,7 +39,7 @@ import java.util.WeakHashMap;
 import javax.management.MBeanServerInvocationHandler;
 
 import org.codehaus.groovy.runtime.GeneratedClosure;
-import org.helios.gmx.util.DequeuedWeakReferenceValueMap;
+import org.helios.gmx.util.DequeuedSoftReferenceValueMap;
 import org.helios.vm.agent.AgentInstrumentationMBean;
 import org.helios.vm.agent.LocalAgentInstaller;
 
@@ -60,11 +60,11 @@ public class ByteCodeRepository implements ClassFileTransformer {
 	/** A map of byte code keyed by the class the bytecode represents */
 	protected final Map<Class<?>, byte[]> classToByteCode = Collections.synchronizedMap(new WeakHashMap<Class<?>, byte[]>());
 	/** A map of Classes keyed by the class name */
-	protected final DequeuedWeakReferenceValueMap<String, Class<?>> nameToClass = new DequeuedWeakReferenceValueMap<String, Class<?>>(); 
+	protected final DequeuedSoftReferenceValueMap<String, Class<?>> nameToClass = new DequeuedSoftReferenceValueMap<String, Class<?>>(); 
 	/** A map of Classes keyed by the class resource name */
-	protected final DequeuedWeakReferenceValueMap<String, Class<?>> resourceNameToClass = new DequeuedWeakReferenceValueMap<String, Class<?>>(); 
+	protected final DequeuedSoftReferenceValueMap<String, Class<?>> resourceNameToClass = new DequeuedSoftReferenceValueMap<String, Class<?>>(); 
 	/** A map of {@link DeferredClass}es keyed by the class name */
-	protected final DequeuedWeakReferenceValueMap<String, DeferredClass> nameToDeferredClass = new DequeuedWeakReferenceValueMap<String, DeferredClass>();
+	protected final DequeuedSoftReferenceValueMap<String, DeferredClass> nameToDeferredClass = new DequeuedSoftReferenceValueMap<String, DeferredClass>();
 	
 	/** The AgentInstrumentation MBean that provides byte code for dynamically generated closures */
 	protected final AgentInstrumentationMBean agentInstrumentation;
@@ -238,7 +238,7 @@ public class ByteCodeRepository implements ClassFileTransformer {
 		if(classBeingRedefined==null) {
 			if(loader instanceof GroovyClassLoader && isGeneratedClosure(bytecode)) {
 				put(className, loader, bytecode);
-				System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");
+				System.out.println("Stored [" + bytecode.length + "] Bytes for deferred class [" + className + "]");
 			}
 		} else {
 			if(GeneratedClosure.class.isAssignableFrom(classBeingRedefined)) {
