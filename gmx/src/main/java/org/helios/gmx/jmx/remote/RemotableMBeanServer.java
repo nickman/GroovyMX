@@ -142,7 +142,6 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 */
 	public Object invokeClosure(Closure<?> closure, Object arguments) {
 		try {
-			System.out.println("\n\tInvoking Closure\n");
 			Object val = closure.call(server);
 			return val;
 		} catch (Exception e) {
