@@ -1,0 +1,13 @@
+import org.helios.gmx.*;
+import java.lang.management.*;
+import org.helios.vm.agent.*;
+import org.helios.vm.*;
+import org.helios.gmx.classloading.*;
+println "=== Finding Attach API ===";
+VirtualMachineBootstrap.findAttachAPI();
+println "==== Starting Reverse ClassLoader ===\n\tJava Home:${System.getProperty('java.home')}\n";
+rcl = ReverseClassLoader.getInstance();
+rcl.addDynamicResource("file:/C:/services/jboss/jboss-4.2.3.GA/docs/examples/jmx/ejb-management.jar");
+println "=== Start Complete ===";
+println rcl.getHttpCodeBaseURL();
+Thread.currentThread().join();
