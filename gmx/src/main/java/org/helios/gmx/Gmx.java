@@ -69,9 +69,11 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.helios.gmx.classloading.ByteCodeRepository;
 import org.helios.gmx.classloading.ReverseClassLoader;
 import org.helios.gmx.jmx.RuntimeMBeanServer;
 import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
+import org.helios.gmx.util.ClosureDehydrator;
 import org.helios.gmx.util.JMXHelper;
 import org.helios.vm.VirtualMachine;
 import org.helios.vm.VirtualMachineBootstrap;
@@ -110,6 +112,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	protected String jvmName = null;
 	/** Flag to indicate if this Gmx is connected */
 	protected final AtomicBoolean connected = new AtomicBoolean(false);
+	/** Flag to indicate if this Gmx is has been remoted */
+	protected final AtomicBoolean remoted = new AtomicBoolean(false);
 	
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
@@ -117,6 +121,9 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	protected MetaMBean remoteClassLoader = null;
 	/** The MetaMBean for the remoted MBeanServer on this remote server */
 	protected MetaMBean remotedMBeanServer = null;
+	
+	/** The closure dehydrator */
+	protected final ClosureDehydrator dehydrator = new ClosureDehydrator();
 	
 	
 	/** The platform MBeanServer Default Domain Name */
@@ -135,9 +142,10 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public static final String PID = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
 	
 	static {
+		ByteCodeRepository.getInstance();
 		Runtime.getRuntime().addShutdownHook(new Thread(){
 			public void run() {
-				System.out.println("Cleaning up Gmx References...");
+				//System.out.println("Cleaning up Gmx References...");
 				int cnt = 0;
 				for(WeakReference<Gmx> ref: GMX_REFERENCES) {
 					Gmx gmx = ref.get();
@@ -147,7 +155,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 					}
 				}
 				GMX_REFERENCES.clear();
-				System.out.println("Cleaned up " + cnt + " Gmx References");
+				//System.out.println("Cleaned up " + cnt + " Gmx References");
 			}
 		});
 	}
@@ -270,6 +278,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @return a remote Gmx
 	 */
 	public static Gmx remote(JMXServiceURL serviceURL) {
+		ReverseClassLoader.getInstance();
 		return new Gmx(serviceURL, new HashMap<String, Object>(0));
 	}
 	
@@ -411,6 +420,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public Gmx installRemote(boolean privateMlet) {
 		ReverseClassLoader.getInstance().installRemotableMBeanServer(this, privateMlet);
+		remoted.set(true);
 		return this;
 	}
 	
@@ -442,15 +452,43 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	}
 	
 	/**
+	 * Invokes the passed closure, passing the {@link MBeanServerConnection} as the <code>it</code>.
+	 * If the Gmx is remote, the closure will be serialized and executed on the foreign {@link MBeanServer}.
+	 * @param <T> The expetced return type of the closure
+	 * @param closure The closure to execute
+	 * @param args Optional arguments to bind to the closure as an <code>args</code> property.
+	 * @return The return value of the closure
+	 */
+	public <T> T exec(Closure<T> closure ) {
+		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
+		//closure.setProperty("args", args);
+		if(!isRemote()) {
+			return closure.call(this);
+		} else {
+			if(!isRemoted()) {
+				synchronized(remoted) {
+					if(!isRemoted()) {
+						installRemote();
+					}
+				}
+			}
+			return invokeRemoteClosure(closure, null);
+		}
+	}
+	
+	/**
 	 * Invokes a closure remotely in the foreign MBeanServer
 	 * @param closure The closure to execute
 	 * @param arguments The closure arguments
 	 * @return The return value of the closure execution.
 	 */
-	public Object invokeRemoteClosure(Closure<?> closure, Object arguments) {
+	@SuppressWarnings("unchecked")
+	public <T> T invokeRemoteClosure(Closure<T> closure, Object arguments) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
 		//ReverseClassLoader.getInstance().registerClosure(closure);
-		return remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, arguments});
+		dehydrator.dehydrate(closure);
+		ByteCodeRepository.getInstance().getByteCode(closure.getClass()); 
+		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, "foo"});
 	}
 	
 	// =========================================================================================
@@ -1041,6 +1079,14 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public MetaMBean getRemotedMBeanServer() {
 		return remotedMBeanServer;
+	}
+
+	/**
+	 * Flag to indicate if this Gmx is has been remoted
+	 * @return true if the Gmx is remoted, false otherwise.
+	 */
+	public boolean isRemoted() {
+		return remoted.get();
 	}
 
 }
