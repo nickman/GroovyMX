@@ -64,6 +64,8 @@ import org.helios.gmx.Gmx;
 import org.helios.gmx.jmx.remote.RemotableMBeanServer;
 import org.helios.gmx.util.FreePortFinder;
 import org.helios.gmx.util.JMXHelper;
+import org.helios.gmx.util.LoggingConfig;
+import org.helios.gmx.util.LoggingConfig.GLogger;
 import org.helios.gmx.util.URLHelper;
 import org.helios.vm.agent.AgentInstrumentation;
 
@@ -107,14 +109,13 @@ public class ReverseClassLoader extends AbstractHandler  {
 	protected final ByteCodeRepository byteCodeRepo = ByteCodeRepository.getInstance();
 	/** A map of local file system resources that can be served by the loader keyed by the URI */
 	protected final Map<String, URL> dynamicResources = new ConcurrentHashMap<String, URL>();
-	
+	/** An instance GLogger */
+	protected final GLogger log = LoggingConfig.getInstance().getLogger(getClass());
 	
 	/** The http classloading URI prefix */
 	public static final String HTTP_URI_PREFIX = "/classloader/";
 	/** The http classloading URI suffix for jar loading */
 	public static final String HTTP_URI_JAR_SUFFIX = "gmx.jar";
-	/** The http classloading URI suffix for jboss aar loading */
-	public static final String HTTP_URI_SAR_SUFFIX = "gmx.sar";
 	
 	
 	/** The server's thread group */
@@ -146,7 +147,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 			if(jarClassLoader) {
 				urls.add(new URL(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX).append(HTTP_URI_JAR_SUFFIX).toString()));
 			}
-			urls.add(new URL(new StringBuilder("http://").append(bindInterface).append(":").append(port).append(HTTP_URI_PREFIX).toString()));
+			urls.add(this.baseURL);
 			return urls.toArray(new URL[urls.size()]);
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to build HttpCodeBaseURL", e);
@@ -248,7 +249,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 		try {
 			iclasses = (Class[])ManagementFactory.getPlatformMBeanServer().getAttribute(AgentInstrumentation.AGENT_INSTR_ON, "AllLoadedClasses");
 		} catch (Exception e) {}
-		log("Checking [" + iclasses.length + "] Instrumentation classes for [" + clazzName + "]");
+		log.log("Checking [" , iclasses.length , "] Instrumentation classes for [" , clazzName , "]");
 		for(Class<?> clazz: iclasses) {
 			if(clazz.getName().equals(clazzName)) {
 				return byteCodeRepo.getByteCode(clazz);
@@ -268,7 +269,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 		jarClassLoader = codeSourceUrl.toString().toLowerCase().endsWith(".jar");
 		if(jarClassLoader) {
 			loadJarBytes(codeSourceUrl);
-			log("Loaded Gmx jar bytes.\n\tStandard:" + jarContent.length + "\n\tGZipped:" + gzJarContent.length);
+			log.log("Loaded Gmx jar bytes.\n\tStandard:" , jarContent.length , "\n\tGZipped:" , gzJarContent.length);
 		}
 		server = new Server();
 		threadPool = new ExecutorThreadPool(Executors.newCachedThreadPool(new ThreadFactory(){
@@ -288,7 +289,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 			container.addBean(threadPool);	
 			server.addBean(container);
 		} catch (Exception e) {
-			log("Warning: Failed to register stats MBean for ReverseClassLoader. Continuing.");
+			log.elog("Warning: Failed to register stats MBean for ReverseClassLoader. Continuing.");
 			e.printStackTrace(System.err);
 		}
 		startServer();
@@ -354,7 +355,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 			port = connector.getPort();
 			ServerSocketChannel channel = (ServerSocketChannel)connector.getConnection();
 			port = channel.socket().getLocalPort();
-			log("Started HTTP Server on [" + bindInterface + ":" + port + "]");
+			log.olog("Started HTTP Server on [" , bindInterface , ":" , port , "]");
 			container.addBean(connector);
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to start Jetty HTTP Server on [" + bindInterface + ":" + port + "]", e);
@@ -382,8 +383,8 @@ public class ReverseClassLoader extends AbstractHandler  {
 	 */
 	@Override
 	public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-		log("Request Target " + request.getMethod() + " [" + target + "] \n\tfrom [" + request.getRemoteAddr() + ":" + request.getRemotePort() + "]");
-		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX)) || (target.equals(HTTP_URI_PREFIX + HTTP_URI_SAR_SUFFIX));		
+		log.log("Request Target ", request.getMethod() , " [" , target , "] \n\tfrom [" , request.getRemoteAddr() , ":" , request.getRemotePort() , "]");
+		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX));		
 		byte[] classBytes = null;
 		if(!jarRequest) {
 			String resource = target.replace(HTTP_URI_PREFIX, "");
@@ -418,7 +419,7 @@ public class ReverseClassLoader extends AbstractHandler  {
         	if(classBytes==null) {
         		response.sendError(404, "Class Not Found [" + target + "]");
         		baseRequest.setHandled(true);
-        		log("ERROR: Sent 404 for [" + target + "]");
+        		log.elog("ERROR: Sent 404 for [" , target , "]");
         		return;
         	}
         	response.setContentLength(classBytes.length);
@@ -431,14 +432,12 @@ public class ReverseClassLoader extends AbstractHandler  {
         	}        	
         }
         os.flush();        
+        log.log("Wrote [" + classBytes.length , "] for resource [", target, "]");
         baseRequest.setHandled(true);
 	}
 	
 	
 	
-	protected void log(Object msg) {
-		System.out.println(msg);
-	}
 	
 	/**
 	 * Installs the remotable MBeanServer MBean in the MBeanServer as a private Met associated with the passd Gmx
@@ -518,7 +517,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 		String[] frags = resourceURL.getPath().split("/");
 		String key = frags[frags.length-1];
 		dynamicResources.put(key, resourceURL);
-		log("Added Dynamic Resource [" + key + "]");
+		log.log("Added Dynamic Resource [" , key , "]");
 	}
 	
 	/**
