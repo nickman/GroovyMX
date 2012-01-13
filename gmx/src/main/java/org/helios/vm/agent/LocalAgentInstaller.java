@@ -208,3 +208,41 @@ public class LocalAgentInstaller  {
 
 
 }
+
+
+/*
+Groovy code attempting to take an exiting jar file representing byte array and adding an entry to it
+without writing out to a physical file system.  (Does not work)
+import org.helios.gmx.classloading.ReverseClassLoader;
+import java.util.jar.*;
+import java.util.zip.*;
+
+rcl = ReverseClassLoader.getInstance();
+byte[] jarBytes = rcl.jarContent;
+println "JAR Bytes:${jarBytes.length}";
+jb4Bytes = rcl.getClass().getClassLoader().getResourceAsStream("jboss/jboss4/jboss-service.xml").getBytes();
+println "JB4 Bytes:${jb4Bytes.length}";
+File f = new File("/tmp/gmx.jar");
+f.delete();
+FileOutputStream fos = null;
+ZipOutputStream jos = null;
+try {
+    fos = new FileOutputStream(f);
+    jos = new ZipOutputStream(fos);
+    
+    fos.write(jarBytes);
+    jos.putNextEntry(new ZipEntry("jboss-service.xml")); jos.write(jb4Bytes, 0, jb4Bytes.length); jos.closeEntry(); jos.flush();
+    fos.flush();
+    fos.close();
+    println "File Writen";
+} finally {
+    try { jos.flush(); } catch (e) {}
+    try { jos.close(); } catch (e) {}
+    try { fos.flush(); } catch (e) {}
+    try { fos.close(); } catch (e) {}
+}
+return null;
+
+
+
+*/
