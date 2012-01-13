@@ -1,1 +1,0 @@
-<mbean code="org.helios.gmx.jmx.remote.RemotableMBeanServer" name="org.helios.gmx:service=RemotableMBeanServer"/>
