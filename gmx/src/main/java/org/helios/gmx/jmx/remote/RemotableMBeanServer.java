@@ -32,8 +32,11 @@ import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -747,5 +750,27 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 		server.unregisterMBean(name);
 	}
 
+	/**
+	 * Merges internally supplied arguments to a closure with caller supplied arguments into one flat object array.
+	 * @param suppliedArgs The caller supplied arguments
+	 * @param injectedArgs The internal API supplied arguments
+	 * @return an Object array
+	 */
+	public static Object[] mergeArguments(Object suppliedArgs, Object...injectedArgs) {
+		Object[] flattened = null;
+		List<Object> fobjs = new ArrayList<Object>();
+		if(injectedArgs!=null && injectedArgs.length>0) {
+			Collections.addAll(fobjs, injectedArgs);
+		}
+		if(suppliedArgs!=null) {
+			if(Object[].class.isAssignableFrom(suppliedArgs.getClass())) {
+				Collections.addAll(fobjs, (Object[])suppliedArgs);
+			} else {
+				fobjs.add(suppliedArgs);
+			}
+		}
+		flattened = new Object[fobjs.size()];
+		return fobjs.toArray(flattened);
+	}
 
 }
