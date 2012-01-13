@@ -68,6 +68,18 @@ public class LoggingConfig {
 	}
 	
 	/**
+	 * Sets a logging level for the passed class.
+	 * Once the level is set, triggers an update on all registered loggers.
+	 * @param clazz The name of logging namespace to set
+	 * @param enabled true to enable, false to disable
+	 */
+	public static void set(Class<?> clazz, boolean enabled) {
+		if(clazz==null) return;
+		set(clazz.getName(), enabled);
+	}
+	
+	
+	/**
 	 * Sets a logging level for the passed name.
 	 * Once the level is set, triggers an update on all registered loggers.
 	 * @param name The name of logging namespace to set
