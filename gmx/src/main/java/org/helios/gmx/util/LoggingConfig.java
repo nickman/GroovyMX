@@ -216,12 +216,13 @@ public class LoggingConfig {
 		}
 		
 		/**
-		 * Logs a formatted value made form the passed objects to the passed print stream
+		 * Conditionally logs a formatted message
+		 * @param override If true, overrides the enabled state of the logger 
 		 * @param stream The print stream to send to
 		 * @param objs The objects to format the message from
 		 */
-		public void log(PrintStream stream, Object...objs) {
-			if(!enabled || objs==null || objs.length<1) return;			
+		private void _log(boolean override, PrintStream stream, Object...objs) {
+			if(stream==null || objs==null || objs.length<1) return;			
 			StringBuilder b = new StringBuilder(sdf.format(new Date()));
 			b.append("[").append(Thread.currentThread().getName()).append("]");
 			int argl = objs.length-1;
@@ -237,6 +238,16 @@ public class LoggingConfig {
 		}
 		
 		/**
+		 * Logs a formatted value made form the passed objects to the passed print stream
+		 * @param stream The print stream to send to
+		 * @param objs The objects to format the message from
+		 */
+		public void log(PrintStream stream, Object...objs) {
+			if(!enabled) return;
+			_log(false, stream, objs);
+		}
+		
+		/**
 		 * Logs a formatted value made form the passed objects to System out
 		 * @param objs The objects to format the message from
 		 */
@@ -245,11 +256,20 @@ public class LoggingConfig {
 		}
 		
 		/**
+		 * Unconditionally logs a formatted value made form the passed objects to System out
+		 * @param objs The objects to format the message from
+		 */
+		public void olog(Object...objs) {
+			_log(true, System.out, objs);
+		}
+		
+		
+		/**
 		 * Logs a formatted value made form the passed objects to System err
 		 * @param objs The objects to format the message from
 		 */
 		public void elog(Object...objs) {
-			log(System.err, objs);
+			_log(true, System.err, objs);
 		}
 		
 		
