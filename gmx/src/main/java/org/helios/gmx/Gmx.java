@@ -448,6 +448,9 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @return a MetaMBean
 	 */
 	public MetaMBean gmxRemote() {
+		if(!isRemoted()) {
+			installRemote();
+		}
 		return remotedMBeanServer;
 	}
 	
