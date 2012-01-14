@@ -40,6 +40,8 @@ import javax.management.MBeanServerInvocationHandler;
 
 import org.codehaus.groovy.runtime.GeneratedClosure;
 import org.helios.gmx.util.DequeuedSoftReferenceValueMap;
+import org.helios.gmx.util.LoggingConfig;
+import org.helios.gmx.util.LoggingConfig.GLogger;
 import org.helios.vm.agent.AgentInstrumentationMBean;
 import org.helios.vm.agent.LocalAgentInstaller;
 
@@ -68,6 +70,10 @@ public class ByteCodeRepository implements ClassFileTransformer {
 	
 	/** The AgentInstrumentation MBean that provides byte code for dynamically generated closures */
 	protected final AgentInstrumentationMBean agentInstrumentation;
+	
+	/** An instance GLogger */
+	protected final GLogger log = LoggingConfig.getInstance().getLogger(getClass());
+
 	
 	/** The resource class name of the GeneratedClosure interface */
 	public static final String generatedClosureName = GeneratedClosure.class.getName().replace('.', '/');
@@ -238,12 +244,12 @@ public class ByteCodeRepository implements ClassFileTransformer {
 		if(classBeingRedefined==null) {
 			if(loader instanceof GroovyClassLoader && isGeneratedClosure(bytecode)) {
 				put(className, loader, bytecode);
-				System.out.println("Stored [" + bytecode.length + "] Bytes for deferred class [" + className + "]");
+				log.log("Class Load Stored [" , bytecode.length , "] Bytes for deferred class [" , className , "]");
 			}
 		} else {
 			if(GeneratedClosure.class.isAssignableFrom(classBeingRedefined)) {
 				put(classBeingRedefined, bytecode);
-				System.out.println("Stored [" + bytecode.length + "] Bytes for class [" + className + "]");				
+				log.log("Class Retransform Stored [" , bytecode.length , "] Bytes for deferred class [" , className , "]");				
 			}			
 		}
 		return bytecode;
