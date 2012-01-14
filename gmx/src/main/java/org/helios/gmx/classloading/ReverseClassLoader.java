@@ -411,9 +411,14 @@ public class ReverseClassLoader extends AbstractHandler  {
         response.setStatus(HttpServletResponse.SC_OK);
         if(jarRequest) {
         	if(gzipAgent) {
-        		os.write(gzJarContent);
+        		response.setHeader("Content-Encoding", "gzip");
+        		classBytes = gzJarContent;
+//        		os.write(gzJarContent);
+//        		log.log("Wrote [" + gzJarContent.length , "] GZipped for resource [", target, "]");
         	} else {
-        		os.write(jarContent);
+        		classBytes = jarContent;
+//        		os.write(jarContent);
+//        		log.log("Wrote [" + jarContent.length , "] for resource [", target, "]");
         	}
         } else {
         	if(classBytes==null) {
