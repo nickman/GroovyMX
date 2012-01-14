@@ -49,8 +49,10 @@ public class GroovySourceInvoker {
 		//ReverseClassLoader.getInstance();
 		try {
 			//Script script = shell.parse(new File("./src/test/groovy/core/RemoteBlockCounts.groovy"));
-			Script script = shell.parse(new File("./src/test/groovy/core/OTServerRemote.groovy"));
+			//Script script = shell.parse(new File("./src/test/groovy/core/OTServerRemote.groovy"));
+			Script script = shell.parse(new File("./src/test/groovy/core/ReverseClassLoaderServer.groovy"));
 			script.run();
+			//Thread.currentThread().join();
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
 		}
