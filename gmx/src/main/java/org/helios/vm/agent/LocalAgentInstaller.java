@@ -145,7 +145,12 @@ public class LocalAgentInstaller  {
 						File tmpFile = File.createTempFile(LocalAgentInstaller.class.getName(), ".jar");
 						System.out.println("Temp File:" + tmpFile.getAbsolutePath());
 						tmpFile.deleteOnExit();		
-						ByteArrayInputStream bais = new ByteArrayInputStream(("Manifest-Version: 1.0\nAgent-Class: " + AgentInstrumentation.class.getName() + "\n").getBytes());
+						StringBuilder manifest = new StringBuilder();
+						manifest.append("Manifest-Version: 1.0\nAgent-Class: " + AgentInstrumentation.class.getName() + "\n");
+						manifest.append("Can-Redefine-Classes: true\n");
+						manifest.append("Can-Retransform-Classes: true\n");
+						manifest.append("Premain-Class: " + AgentInstrumentation.class.getName() + "\n");
+						ByteArrayInputStream bais = new ByteArrayInputStream(manifest.toString().getBytes());
 						Manifest mf = new Manifest(bais);
 						fos = new FileOutputStream(tmpFile, false);
 						jos = new JarOutputStream(fos, mf);
