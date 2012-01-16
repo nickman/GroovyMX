@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * <p>Title: LaunchedJVMProcess</p>
@@ -48,6 +49,11 @@ public class LaunchedJVMProcess {
 	private final String processId;	
 	/** The Java Process */
 	private final Process process;
+	/** The exit code from the process */
+	protected final AtomicInteger exitCode = new AtomicInteger(Integer.MAX_VALUE);
+	
+	/** A list of the arguments to this process */
+	private final List<String> arguments;
 	/** The process standard out reader thread */
 	private final Thread stdOutThread;
 	/** The out queue */
@@ -77,9 +83,10 @@ public class LaunchedJVMProcess {
 	 * Creates a new LaunchedJVMProcess
 	 * @param processId The native OS process ID 
 	 * @param process The java process
+	 * @param arguments A list of the arguments to this JVM launch
 	 * @return a new LaunchedJVMProcess or an existing cached process.
 	 */
-	static LaunchedJVMProcess newInstance(String processId, Process process) {
+	static LaunchedJVMProcess newInstance(String processId, Process process, List<String> arguments) {
 		if(processId==null) throw new IllegalArgumentException("The passed processId was null", new Throwable());
 		LaunchedJVMProcess jvmProcess = processes.get(processId);
 		if(jvmProcess==null) {
@@ -87,7 +94,7 @@ public class LaunchedJVMProcess {
 				jvmProcess = processes.get(processId);
 				if(jvmProcess==null) {
 					if(process==null) throw new IllegalArgumentException("The passed process was null", new Throwable());
-					jvmProcess = newInstance(processId, process);
+					jvmProcess = new LaunchedJVMProcess(processId, process, arguments);
 				}
 			}
 		}
@@ -98,18 +105,20 @@ public class LaunchedJVMProcess {
 	 * Creates a new LaunchedJVMProcess
 	 * @param processId The native OS process ID 
 	 * @param process The java process
+	 * @param arguments A list of the arguments to this JVM launch
 	 */
-	private LaunchedJVMProcess(final String processId, final Process process) {
+	private LaunchedJVMProcess(final String processId, final Process process, final List<String> arguments) {
 		super();	
 		this.processId = processId;
 		this.process = process;
+		this.arguments = arguments;
 		stdOutThread = newStreamReaderThread("Out", this.processId, this.process.getInputStream(), outQueue);
 		stdErrThread = newStreamReaderThread("Err", this.processId, this.process.getErrorStream(), errQueue);
 		final LaunchedJVMProcess jvmp = this;
 		Thread pWatcher = new Thread(STREAMER_THREAD_GROUP, "ProcessWatcher-" + processId) {
 			public void run() {
 				try {
-					process.waitFor();
+					exitCode.set(process.waitFor());
 					if(stdOutThread.isAlive()) stdOutThread.interrupt();
 					if(stdErrThread.isAlive()) stdErrThread.interrupt();
 					processes.remove(jvmp);
@@ -227,8 +236,20 @@ public class LaunchedJVMProcess {
 	 * @return the exit value for the subprocess.
 	 * @see java.lang.Process#exitValue()
 	 */
-	public int exitValue() {
-		return process.exitValue();
+	public Integer exitValue() {
+		if(isRunning()) {
+			return null;
+		} else {
+			return exitCode.get();
+		}		
+	}
+	
+	/**
+	 * Determines if the process is still running
+	 * @return true if the process is still running, false otherwise
+	 */
+	public boolean isRunning() {
+		return exitCode.get()==Integer.MAX_VALUE;
 	}
 
 
@@ -259,17 +280,6 @@ public class LaunchedJVMProcess {
 	 */
 	public OutputStream getOutputStream() {
 		return process.getOutputStream();
-	}
-
-
-	/**
-	 * Returns a string representation of this process
-	 * @return a string representation of this process
-	 * @see java.lang.Object#toString()
-	 */
-	@Override
-	public String toString() {
-		return process.toString();
 	}
 
 
@@ -317,5 +327,35 @@ public class LaunchedJVMProcess {
 		t.setDaemon(true);
 		t.start();
 		return t;
+	}
+
+	/**
+	 * Constructs a <code>String</code> with all attributes in <code>name:value</code> format.
+	 * @return a <code>String</code> representation of this object.
+	 */
+	public String toString() {
+	    final String TAB = "\n\t";
+	    StringBuilder retValue = new StringBuilder();    
+	    retValue.append("LaunchedJVMProcess [")
+		    .append(TAB).append("processId:").append(this.processId)
+		    .append(TAB).append("isRunning:").append(this.isRunning())
+		    .append(TAB).append("process:").append(this.process)		    
+	    	.append(TAB).append("outQueue [");
+	    	for(String line: new ArrayList<String>(outQueue)) {
+	    		retValue.append("\n\t\t").append(line);
+	    	}
+	    	retValue.append("\n\t]")
+		    .append(TAB).append("errQueue [");
+	    	for(String line: new ArrayList<String>(errQueue)) {
+	    		retValue.append("\n\t\t").append(line);
+	    	}
+	    	retValue.append("\n\t]")	    	
+		    .append(TAB).append("arguments [");
+	    	for(String arg: arguments) {
+	    		retValue.append("\n\t\t").append(arg);
+	    	}
+	    	retValue.append("\n\t]")
+	    	.append("\n]");    
+	    return retValue.toString();
 	}
 }

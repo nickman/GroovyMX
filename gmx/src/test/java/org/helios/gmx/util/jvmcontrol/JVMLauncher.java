@@ -24,8 +24,15 @@
  */
 package org.helios.gmx.util.jvmcontrol;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.lang.reflect.Field;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>Title: JVMLauncher</p>
@@ -39,27 +46,157 @@ public class JVMLauncher {
 
 	/** The process builder */
 	private final ProcessBuilder processBuilder;
+	/** The main class */
+	protected volatile String mainClass = null;
+	/** The main class arguments */
+	protected volatile String[] mainArgs = null;
+	/** The configured Debug option */
+	protected volatile String debugOption = null;
+	/** The configured JavaAgent option */
+	protected final List<String> javaAgent = new ArrayList<String>();
+	/** The launched JVM timeout */
+	protected long timeout = -1; 
+	
 	/** The classpath */
 	protected final StringBuilder classpath = new StringBuilder();
+	/** The system properties */
+	protected final List<String> sysProps = new ArrayList<String>();
+	
 	/** Indicates if this JVM is running in Windows */
 	public static final boolean IS_WINDOWS = System.getProperty("os.name").toLowerCase().contains("windows");
 	/** This JVM's java executable */
 	public static final String THIS_JAVA_EXEC = System.getProperty("java.home") + File.separator + "bin" + File.separator + (IS_WINDOWS ? "javaw.exe" : "java");
+	/** The Debug option template */
+	public static String DEBUG_OPTION = "-Xrunjdwp:transport=dt_socket,address=%s,server=%s,suspend=%s";
 	
 	/**
 	 * Creates a new JVMLauncher
-	 * @param commands An optional array of commands to append to the process builder
 	 * @return a new JVMLauncher
 	 */
-	public static JVMLauncher newJVMLauncher(String...commands) {
+	public static JVMLauncher newJVMLauncher() {
 		JVMLauncher launcher = new JVMLauncher();
-		if(commands!=null) {
-			for(String command: commands) {
-				if(command==null || command.trim().length()<1) continue;
-				launcher.processBuilder.command(command.trim());
+		return launcher;
+	}
+	
+	/**
+	 * Enables the debug agent on the JVM
+	 * @param port The port to listen on
+	 * @param server Indicates if the debug agent should listen as a server 
+	 * @param suspend Indicates if the JVM should suspend until a debugger connects
+	 * @return the JVM launcher
+	 */
+	public JVMLauncher debug(int port, boolean server, boolean suspend) {
+		debugOption = String.format(DEBUG_OPTION, port, server ? "y" : "n", suspend ? "y" : "n");
+		return this;
+	}
+	
+	/**
+	 * Configures the JVMLauncher for a Java Agent 
+	 * @param agentJar The location of the agent jar
+	 * @param agentOptions The agent options
+	 * @return the JVM Launcher
+	 */
+	public JVMLauncher javaAgent(File agentJar, String...agentOptions) {		
+		if(agentJar==null) throw new IllegalArgumentException("The passed agent jar was null", new Throwable());
+		if(!agentJar.exists()) {
+			throw new IllegalArgumentException("The specified agent jar [" + agentJar + "] does not exist", new Throwable());
+		}
+		StringBuilder b = new StringBuilder("-javaagent:");
+		b.append(agentJar.getAbsolutePath());
+		if(agentOptions!=null && agentOptions.length>0) {
+			b.append(":");
+			boolean atLeastOne = false;
+			for(String option: agentOptions) {
+				b.append(option.trim()).append(",");
+				atLeastOne = true;
+			}
+			if(atLeastOne) {
+				b.deleteCharAt(b.length()-1);
 			}
 		}
-		return launcher;
+		javaAgent.add(b.toString());
+		return this;
+		
+	}
+	
+	/**
+	 * Configures the JVMLauncher for a Java Agent 
+	 * @param agentJar The location of the agent jar
+	 * @param agentOptions The agent options
+	 * @return the JVM Launcher
+	 */
+	public JVMLauncher javaAgent(String agentJar, String...agentOptions) {
+		if(agentJar==null) throw new IllegalArgumentException("The passed agent jar was null", new Throwable());
+		return javaAgent(new File(agentJar), agentOptions);
+	}
+	
+	
+	
+	
+	/**
+	 * Appends classpaths to the JVM's command line options
+	 * @param paths The paths to append to the classpath 
+	 * @return this JVMLauncher
+	 */
+	public JVMLauncher appendClassPath(String...paths) {
+		if(paths!=null) {
+			for(String path: paths) {
+				if(path==null || path.trim().length()<1) continue;
+				classpath.append(File.pathSeparator).append(path.trim());
+			}
+		}
+		return this;
+	}
+	
+	/**
+	 * Appends system property declarations to the JVM's command line options
+	 * @param sysProps system property name and value pairs, <code>=</code> separated 
+	 * @return this JVMLauncher
+	 */
+	public JVMLauncher appendSysProps(String...sysProps) {
+		if(sysProps!=null) {
+			for(String sysProp: sysProps) {
+				if(sysProp==null || sysProp.trim().length()<1) continue;
+				this.sysProps.add("-D" + sysProp.trim());
+			}
+		}
+		return this;
+	}	
+	
+	/**
+	 * Appends system property declarations to the JVM's command line options
+	 * @param sysProps Properties to be appended to the  JVM's command line options as "-D" options
+	 * @return this JVMLauncher
+	 */
+	public JVMLauncher appendSysProps(Properties sysProps) {
+		if(sysProps!=null) {
+			for(Map.Entry<Object, Object> entry: sysProps.entrySet()) {
+				this.sysProps.add("-D" + entry.getKey().toString() + ":" + entry.getValue().toString());
+			}
+		}
+		return this;
+	}
+	
+	/**
+	 * Causes the JVM to exit after the configured timeout
+	 * @param timeout The timeout period in ms.
+	 * @return this launcher
+	 */
+	public JVMLauncher timeout(long timeout) {
+		return timeout(timeout, TimeUnit.MILLISECONDS);
+	}
+	
+	
+	/**
+	 * Causes the JVM to exit after the configured timeout
+	 * @param timeout The timeout period
+	 * @param unit The unit of time
+	 * @return this launcher
+	 */
+	public JVMLauncher timeout(long timeout, TimeUnit unit) {
+		if(unit==null) unit = TimeUnit.MILLISECONDS;
+		this.timeout = TimeUnit.MILLISECONDS.convert(timeout, unit);
+		return this;
 	}
 	
 	/**
@@ -68,12 +205,43 @@ public class JVMLauncher {
 	 */
 	public LaunchedJVMProcess start() {
 		Process process = null;
+		if(timeout==-1 && mainClass==null) {
+			timeout(0);
+		}
 		try {
+			if(debugOption!=null) {
+				processBuilder.command().add("-Xdebug");
+				processBuilder.command().add(debugOption);
+			}
+			if(classpath.length()<1) {
+				classpath.append(System.getProperty("java.class.path"));
+			}
+			processBuilder.command().add("-cp");
+			processBuilder.command().add(classpath.toString());
+			if(!sysProps.isEmpty()) {
+				for(String sysProp: sysProps) {
+					processBuilder.command().add(sysProp);
+				}
+			}
+			if(timeout!=-1) {
+				processBuilder.command().add(MainTimeoutAndExit.class.getName());
+				processBuilder.command().add("" + timeout);
+			}
+			if(mainClass!=null) {
+				processBuilder.command().add(mainClass);
+				if(mainArgs!=null) {
+					for(String arg: mainArgs) {
+						if(arg==null) continue;
+						processBuilder.command().add(arg);
+					}
+					
+				}
+			}
+			System.out.println("Starting:\n" + processBuilder.command());
 			process = processBuilder.start();
-			Field f = process.getClass().getDeclaredField("pid");
-			f.setAccessible(true);
-			int pid = f.getInt(process);
-			return LaunchedJVMProcess.newInstance("" + pid, process);
+			String pid = getPid(process);
+			
+			return LaunchedJVMProcess.newInstance("" + pid, process, processBuilder.command());
 		} catch (Exception e) {
 			if(process!=null) {
 				process.destroy();
@@ -82,6 +250,34 @@ public class JVMLauncher {
 		}
 	}
 	
+	/**
+	 * Returns the PID for the passed process
+	 * @param process The process
+	 * @return the PID in string form
+	 */
+	protected String getPid(Process process) {		
+		InputStreamReader isr = null;
+		BufferedReader br = null;
+		try {
+			isr = new InputStreamReader(process.getInputStream());
+			br = new BufferedReader(isr);
+			String line = null;
+			while(true) {		
+				line = br.readLine();
+				if(line.startsWith("MainTimeoutAndExit PID:")) {
+					line = line.split(":")[1];
+					break;
+				}
+			}
+			return line;
+		} catch (Exception e) {
+			process.destroy();
+			throw new RuntimeException("Failed to get PID from process", e);
+		} finally {
+			if(br!=null) try { br.close(); } catch (Exception e) {}
+			if(isr!=null) try { isr.close(); } catch (Exception e) {}
+		}
+	}
 	
 	
 	
@@ -93,11 +289,36 @@ public class JVMLauncher {
 	}
 	
 	/**
+	 * Appends a main class and arguments
+	 * @param mainClass The main class to run
+	 * @param mainArgs The command line arguments to the main class
+	 * @return this JVMLauncher
+	 */
+	public JVMLauncher appendMain(String mainClass, Object...mainArgs) {
+		this.mainClass = mainClass;
+		List<String> args = new ArrayList<String>();
+		if(mainArgs!=null) {
+			for(Object arg: mainArgs) {
+				if(arg!=null) {
+					args.add(arg.toString());
+				}
+			}
+		}
+		this.mainArgs = args.toArray(new String[args.size()]);
+		return this;		
+	}
+	
+	
+	
+	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-
+		//LaunchedJVMProcess jvm = JVMLauncher.newJVMLauncher().timeout(100000).debug(1889, true, true).start();
+		LaunchedJVMProcess jvm = JVMLauncher.newJVMLauncher().timeout(100000).start();
+		try { Thread.sleep(3000); } catch (Exception e) {} 
+		System.out.println(jvm);
+		try { jvm.waitFor(); } catch (Exception e) {}
 	}
 
 }
