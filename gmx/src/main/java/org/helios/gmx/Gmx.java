@@ -35,8 +35,11 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -459,21 +462,34 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param args Optional arguments to bind to the closure as an <code>args</code> property.
 	 * @return The return value of the closure
 	 */
-	public <T> T exec(Closure<T> closure ) {
+	public <T> T exec(Closure<T> closure, Object args) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
-		//closure.setProperty("args", args);
 		if(!isRemote()) {
-			return closure.call(this);
-		} else {
-			if(!isRemoted()) {
-				synchronized(remoted) {
-					if(!isRemoted()) {
-						installRemote();
-					}
+			return closure.call(mergeArguments(this, args));
+		}
+		if(!isRemoted()) {
+			synchronized(remoted) {
+				if(!isRemoted()) {
+					installRemote();
 				}
 			}
-			return invokeRemoteClosure(closure, null);
 		}
+		return invokeRemoteClosure(closure, null);
+	}
+	
+	/**
+	 * Executes the passed closure forcing local execution.
+	 * If the Gmx represents a local {@link MBeanServer}, this call is the same as {@link Gmx#exec(Closure)}.
+	 * If the Gmx represents a remote {@link MBeanServerConnection}, this method supresses remoting and invokes the call against the remote {@link MBeanServerConnection} stub. 
+	 * @param closure The closure to be executed with this Gmx's {@link MBeanServerConnection} as the first parameter.
+	 * @param args The caller supplied arguments to the closure
+	 * @return the return value of the closure
+	 */
+	public <T> T execLocal(Closure<T> closure, Object args) {
+		if(!isRemote()) {
+			return exec(closure, args);
+		}
+		return closure.call(mergeArguments(args, this));
 	}
 	
 	/**
@@ -485,7 +501,6 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	@SuppressWarnings("unchecked")
 	public <T> T invokeRemoteClosure(Closure<T> closure, Object arguments) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
-		//ReverseClassLoader.getInstance().registerClosure(closure);
 		dehydrator.dehydrate(closure);
 		ByteCodeRepository.getInstance().getByteCode(closure.getClass()); 
 		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, "foo"});
@@ -1087,6 +1102,29 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public boolean isRemoted() {
 		return remoted.get();
+	}
+	
+	/**
+	 * Merges internally supplied arguments to a closure with caller supplied arguments into one flat object array.
+	 * @param suppliedArgs The caller supplied arguments
+	 * @param injectedArgs The internal API supplied arguments
+	 * @return an Object array
+	 */
+	public static Object[] mergeArguments(Object suppliedArgs, Object...injectedArgs) {
+		Object[] flattened = null;
+		List<Object> fobjs = new ArrayList<Object>();
+		if(injectedArgs!=null && injectedArgs.length>0) {
+			Collections.addAll(fobjs, injectedArgs);
+		}
+		if(suppliedArgs!=null) {
+			if(Object[].class.isAssignableFrom(suppliedArgs.getClass())) {
+				Collections.addAll(fobjs, (Object[])suppliedArgs);
+			} else {
+				fobjs.add(suppliedArgs);
+			}
+		}
+		flattened = new Object[fobjs.size()];
+		return fobjs.toArray(flattened);
 	}
 
 }
