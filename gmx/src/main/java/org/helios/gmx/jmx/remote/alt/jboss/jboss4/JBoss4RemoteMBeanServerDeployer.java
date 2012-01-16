@@ -22,45 +22,15 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package org.helios.gmx.closures;
-
-import groovy.lang.GroovyShell;
-import groovy.lang.Script;
-
-import java.io.File;
-
-import org.helios.gmx.classloading.ReverseClassLoader;
+package org.helios.gmx.jmx.remote.alt.jboss.jboss4;
 
 /**
- * <p>Title: GroovySourceInvoker</p>
- * <p>Description: </p> 
+ * <p>Title: JBoss4RemoteMBeanServerDeployer</p>
+ * <p>Description: Deploys the remote mbeanserver to a JBoss 4 server.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>org.helios.gmx.closures.GroovySourceInvoker</code></p>
+ * <p><code>org.helios.gmx.jmx.remote.alt.jboss.jboss4.JBoss4RemoteMBeanServerDeployer</code></p>
  */
-public class GroovySourceInvoker {
-
-	/**
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		log("GroovySourceInvoker");
-		GroovyShell shell = new GroovyShell();
-		//ReverseClassLoader.getInstance();
-		try {
-			//Script script = shell.parse(new File("./src/test/groovy/core/RemoteBlockCounts.groovy"));
-			//Script script = shell.parse(new File("./src/test/groovy/core/OTServerRemote.groovy"));
-			Script script = shell.parse(new File("./src/test/groovy/core/ReverseClassLoaderServer.groovy"));
-			script.run();
-			//Thread.currentThread().join();
-		} catch (Exception e) {
-			e.printStackTrace(System.err);
-		}
-
-	}
-	
-	public static void log(Object msg) {
-		System.out.println(msg);
-	}
+public class JBoss4RemoteMBeanServerDeployer {
 
 }
