@@ -26,7 +26,6 @@ package org.helios.gmx.util.jvmcontrol;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -88,6 +87,23 @@ public class JVMLauncher {
 	public JVMLauncher debug(int port, boolean server, boolean suspend) {
 		debugOption = String.format(DEBUG_OPTION, port, server ? "y" : "n", suspend ? "y" : "n");
 		return this;
+	}
+	
+	/**
+	 * Sets up a super basic JMX listener using sysprops.
+	 * Remoting is enabled, authentication and ssl are disabled. 
+	 * @param port The port to listen on
+	 * @return this launcher.
+	 */
+	public JVMLauncher basicPortJmx(int port) {
+		Properties p = new Properties();
+		p.put("com.sun.management.jmxremote", "");
+		p.put("com.sun.management.jmxremote.authenticate", "false");
+		p.put("com.sun.management.jmxremote.ssl", "false");
+		p.put("com.sun.management.jmxremote.port", "" + port);
+		appendSysProps(p);
+		return this;
+		
 	}
 	
 	/**
@@ -171,7 +187,7 @@ public class JVMLauncher {
 	public JVMLauncher appendSysProps(Properties sysProps) {
 		if(sysProps!=null) {
 			for(Map.Entry<Object, Object> entry: sysProps.entrySet()) {
-				this.sysProps.add("-D" + entry.getKey().toString() + ":" + entry.getValue().toString());
+				this.sysProps.add("-D" + entry.getKey().toString() + "=" + entry.getValue().toString());
 			}
 		}
 		return this;

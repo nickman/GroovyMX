@@ -465,7 +465,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param args Optional arguments to bind to the closure as an <code>args</code> property.
 	 * @return The return value of the closure
 	 */
-	public <T> T exec(Closure<T> closure, Object args) {
+	public <T> T exec(Closure<T> closure, Object...args) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
 		if(!isRemote()) {
 			return closure.call(mergeArguments(this, args));
@@ -477,7 +477,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 				}
 			}
 		}
-		return invokeRemoteClosure(closure, null);
+		return invokeRemoteClosure(closure, args);
 	}
 	
 	/**
@@ -488,7 +488,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param args The caller supplied arguments to the closure
 	 * @return the return value of the closure
 	 */
-	public <T> T execLocal(Closure<T> closure, Object args) {
+	public <T> T execLocal(Closure<T> closure, Object...args) {
 		if(!isRemote()) {
 			return exec(closure, args);
 		}
@@ -502,11 +502,11 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @return The return value of the closure execution.
 	 */
 	@SuppressWarnings("unchecked")
-	public <T> T invokeRemoteClosure(Closure<T> closure, Object arguments) {
+	public <T> T invokeRemoteClosure(Closure<T> closure, Object...arguments) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
 		dehydrator.dehydrate(closure);
-		ByteCodeRepository.getInstance().getByteCode(closure.getClass()); 
-		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, "foo"});
+		byte[] closureByteCode = ByteCodeRepository.getInstance().getByteCode(closure.getClass()); 
+		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closureByteCode, arguments});
 	}
 	
 	// =========================================================================================

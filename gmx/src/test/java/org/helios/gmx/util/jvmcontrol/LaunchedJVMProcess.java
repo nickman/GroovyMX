@@ -36,6 +36,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.eclipse.jetty.util.log.Log;
+
 /**
  * <p>Title: LaunchedJVMProcess</p>
  * <p>Description: Represents a launched JVM process.</p> 
@@ -227,7 +229,30 @@ public class LaunchedJVMProcess {
 	 * @see java.lang.Process#destroy()
 	 */
 	public void destroy() {
+		try { stdOutThread.interrupt(); } catch (Exception e) {}
+		try { stdErrThread.interrupt(); } catch (Exception e) {}
+		outQueue.clear();
+		errQueue.clear();
 		process.destroy();
+	}
+	
+	public int stop() {
+		OutputStream os = process.getOutputStream();
+		try {
+			os.write("STOP\n".getBytes());
+			os.flush();
+			Thread.sleep(200);
+			System.out.println("Pending JVM Output:" + outQueue);
+			System.err.println("Pending JVM Errput:" + errQueue);
+//			try { stdOutThread.interrupt(); } catch (Exception e) {}
+//			try { stdErrThread.interrupt(); } catch (Exception e) {}
+			outQueue.clear();
+			errQueue.clear();
+			int code =  process.waitFor();
+			return code;
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to call stop on JVM", e);
+		}
 	}
 
 

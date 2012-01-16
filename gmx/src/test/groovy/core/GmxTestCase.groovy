@@ -6,7 +6,11 @@ import org.junit.*;
 import org.junit.rules.*;
 import org.apache.log4j.*;
 
-
+/**
+	In VM Groovy Test Cases
+	Whitehead
+	Jan 16, 2012
+*/
 class GmxLocalTestCase extends GroovyTestCase {
 	/** The pid of the current VM */
 	def pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];

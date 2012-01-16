@@ -32,6 +32,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -85,6 +86,8 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	protected String reverseClassLoadHost;
 	/** The reverse class loader port */
 	protected int reverseClassLoadPort;
+	/** Invocation Context Classloader */
+	protected ClassLoader invocationContextClassLoader = null;
 	
 	
 	
@@ -97,6 +100,7 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 		classLoader = getClass().getClassLoader();
 		reverseClassLoadHost = this.reverseClassLoadURL.getHost(); 
 		reverseClassLoadPort = this.reverseClassLoadURL.getPort();
+		invocationContextClassLoader = new URLClassLoader(new URL[]{this.reverseClassLoadURL}, classLoader);
 	}
 	
 	/**
@@ -115,6 +119,7 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 		this.reverseClassLoadURL = reverseClassLoadURL;
 		reverseClassLoadHost = this.reverseClassLoadURL.getHost(); 
 		reverseClassLoadPort = this.reverseClassLoadURL.getPort();
+		invocationContextClassLoader = new URLClassLoader(new URL[]{this.reverseClassLoadURL}, classLoader);
 	}
 
 	/**
@@ -123,10 +128,12 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 * @param arguments optional arguments
 	 * @return the return value of the closure
 	 */
-	public Object invokeClosure(byte[] closureBytes, Object arguments) {
+	public Object invokeClosure(byte[] closureBytes, Object...arguments) {
 		System.out.println("\n\tExtracting Closure from byte array:" + closureBytes.length + " Bytes\n");
 		Closure<?> closure = null;
+		ClassLoader current = Thread.currentThread().getContextClassLoader();
 		try {
+			Thread.currentThread().setContextClassLoader(invocationContextClassLoader);
 			ByteArrayInputStream bais = new ByteArrayInputStream(closureBytes);
 			ObjectInputStream ois = new ObjectInputStream(bais);
 			closure = (Closure<?>)ois.readObject();
@@ -134,6 +141,8 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
 			throw new RuntimeException("Failed to extract closure form byte array", e);
+		} finally {
+			Thread.currentThread().setContextClassLoader(current);
 		}
 	}
 	
@@ -143,13 +152,23 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 * @param arguments optional arguments
 	 * @return the return value of the closure
 	 */
-	public Object invokeClosure(Closure<?> closure, Object arguments) {
+	public Object invokeClosure(Closure<?> closure, Object[] arguments) {
+		ClassLoader current = Thread.currentThread().getContextClassLoader();		
 		try {
-			Object val = closure.call(server);
+			Thread.currentThread().setContextClassLoader(invocationContextClassLoader);
+			int argsSize = (arguments==null ? 0 : arguments.length);
+			Object[] args = new Object[argsSize+1];
+			args[0] = server;
+			for(int i = 0; i < argsSize; i++) {
+				args[i+1] = arguments[i];
+			}
+			Object val = closure.call(args);
 			return val;
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
 			throw new RuntimeException("Failed to invoke closure", e);
+		} finally {
+			Thread.currentThread().setContextClassLoader(current);
 		}
 	}
 	

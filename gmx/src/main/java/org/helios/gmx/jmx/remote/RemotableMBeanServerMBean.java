@@ -40,13 +40,6 @@ import javax.management.MBeanServer;
  */
 public interface RemotableMBeanServerMBean extends MBeanServer, MBeanRegistration {
 	
-	/**
-	 * Invokes the closure extracted from the passed byte array and returns the result
-	 * @param closureBytes The closure serialized as a byte array
-	 * @param arguments optional arguments
-	 * @return the return value of the closure
-	 */
-	public Object invokeClosure(byte[] closureBytes, Object arguments);
 	
 	/**
 	 * Invokes the submitted script passing in the MBeanServer as a binding and returning the script's return value.
@@ -62,7 +55,15 @@ public interface RemotableMBeanServerMBean extends MBeanServer, MBeanRegistratio
 	 * @param arguments optional arguments
 	 * @return the return value of the closure
 	 */
-	public Object invokeClosure(Closure<?> closure, Object arguments);	
+	public Object invokeClosure(Closure<?> closure, Object[] arguments);	
+	
+	/**
+	 * Invokes the closure extracted from the passed byte array and returns the result
+	 * @param closureBytes The closure serialized as a byte array
+	 * @param arguments optional arguments
+	 * @return the return value of the closure
+	 */
+	public Object invokeClosure(byte[] closureBytes, Object...arguments);	
 	
 	/**
 	 * The URL of the reverse class loader

@@ -73,10 +73,14 @@ public class MainTimeoutAndExit {
 				try {
 					inreader = new InputStreamReader(System.in);
 					breader = new BufferedReader(inreader);
-					while(!(breader.readLine()).equals("STOP")) {
-						
+					String line = null;
+					while(true) {
+						line = breader.readLine();
+						System.out.println("breader [" + line + "]");
+						if("STOP".equals(line)) break;
 					}
 					System.out.println("Received Stop Signal. Exiting...");
+					System.out.flush();
 					mainThread.interrupt();
 					System.exit(0); // OK
 				} catch (Exception e) {
