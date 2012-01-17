@@ -940,7 +940,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param connNot The connection notification
 	 */
 	public void onConnectionClosed(JMXConnectionNotification connNot) {
-		System.out.println("Connection Closed:" + connNot);
+		//System.out.println("Connection Closed:" + connNot);
 		//close();
 	}
 

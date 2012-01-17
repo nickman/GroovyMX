@@ -424,7 +424,7 @@ public class ReverseClassLoader extends AbstractHandler  {
         	if(classBytes==null) {
         		response.sendError(404, "Class Not Found [" + target + "]");
         		baseRequest.setHandled(true);
-        		log.elog("ERROR: Sent 404 for [" , target , "]");
+        		log.log("ERROR: Sent 404 for [" , target , "]");
         		return;
         	}
         	response.setContentLength(classBytes.length);

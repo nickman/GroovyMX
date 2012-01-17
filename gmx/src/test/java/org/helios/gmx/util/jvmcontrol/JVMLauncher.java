@@ -388,10 +388,6 @@ public class JVMLauncher {
 	 * @return the name of the directory with the root of the classpath
 	 */
 	protected String writeMainClass() {
-		StringBuilder b = new StringBuilder();
-		File classFile = null;
-		FileOutputStream fos = null;
-		
 		try {
 			File jvmDir = new File(TMP_DIR + File.separator + JVM_NAME);
 			if(jvmDir.exists()) {
@@ -399,28 +395,42 @@ public class JVMLauncher {
 			}
 			jvmDir.mkdir();
 			jvmDir.deleteOnExit();
-			b.append(jvmDir.getAbsolutePath());
-			for(String pkg: MainTimeoutAndExit.class.getPackage().getName().split("\\.")) {
-				b.append(File.separator).append(pkg);
-			}
-			new File(b.toString()).mkdirs();
-			b.append(File.separator).append(MainTimeoutAndExit.class.getSimpleName()).append(".class");
-			classFile = new File(b.toString());
-			fos = new FileOutputStream(classFile);
-			URL codeSource = MainTimeoutAndExit.class.getProtectionDomain().getCodeSource().getLocation();
-			System.out.println("MainTimeoutAndExit CodeSource URL [" + codeSource + "]");
-			Map<String, byte[]> classBytes = ByteCodeNet.getClassBytes(MainTimeoutAndExit.class);
-			//fos.write(classBytes);
-			fos.flush();
-			fos.close();
-			System.out.println("MainTimeoutAndExit class file [" + classFile.getAbsolutePath() + "]");
+			writeClassMap(jvmDir, ByteCodeNet.getClassBytes(MainTimeoutAndExit.class));
 			return jvmDir.getAbsolutePath();			
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to write main class", e);
-		} finally {
-			if(fos!=null) {
-				try { fos.flush(); } catch (Exception e) {}
-				try { fos.close(); } catch (Exception e) {}
+		}
+	}
+	
+	protected void writeClassMap(File dir, Map<String, byte[]> classBytes) {
+		for(Map.Entry<String, byte[]> entry: classBytes.entrySet()) {
+			FileOutputStream fos = null;
+			String className = entry.getKey();
+			try {
+				StringBuilder classDirName = new StringBuilder(dir.getAbsolutePath());
+				
+				String[] pkgs = className.split("/");
+				if(pkgs.length>1) {
+					for(int i = 0; i < pkgs.length-1; i++) {
+						classDirName.append(File.separator).append(pkgs[i]);
+					}
+				}
+				File classDir = new File(classDirName.toString());
+				classDir.mkdirs();
+				
+				File classFile = new File(classDir.getAbsolutePath() + File.separator + pkgs[pkgs.length-1] + ".class");
+				fos = new FileOutputStream(classFile);
+				fos.write(entry.getValue());
+				fos.flush();
+				fos.close();
+				fos = null;
+				System.out.println("Wrote [" + entry.getValue().length + "] bytes for class [" + className + "]");
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to write class bytes for [" + className + "]", e);
+			} finally {
+				if(fos!=null) {
+					try { fos.close(); } catch (Exception e) {}
+				}
 			}
 		}
 	}

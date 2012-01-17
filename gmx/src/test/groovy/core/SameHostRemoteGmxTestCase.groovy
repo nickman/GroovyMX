@@ -62,7 +62,7 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
     }
     
 	
-	/*
+	
     public void testRemoteClosureForMBeanCountAndDomains() throws Exception {
     	def port = 18900;
     	def gmx = null;
@@ -75,7 +75,7 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	    	Integer mbeanCount = gmx.getMBeanCount();
 	    	def domainClosure = { return it.getDomains(); };
 	    	gmx.installRemote();
-	    	println "Pausing. PID:${jvmProcess.processId}";
+	    	//println "Pausing. PID:${jvmProcess.processId}";
 	    	//Thread.sleep(120000);
 	    	def remoteDomains = gmx.exec(domainClosure);
     	} finally {
@@ -83,7 +83,7 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
     	}
     }
-    */
+    
 
 }
 

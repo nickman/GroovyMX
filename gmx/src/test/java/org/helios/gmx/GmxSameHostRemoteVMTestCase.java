@@ -33,6 +33,7 @@ import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 import org.helios.gmx.classloading.ByteCodeRepository;
 import org.helios.gmx.classloading.ReverseClassLoader;
+import org.helios.gmx.util.ClosureCompiler;
 import org.helios.gmx.util.LoggingConfig;
 import org.helios.gmx.util.jvmcontrol.JVMLauncher;
 import org.helios.gmx.util.jvmcontrol.LaunchedJVMProcess;
@@ -66,8 +67,8 @@ public class GmxSameHostRemoteVMTestCase {
 	@BeforeClass
 	public static void classSetup() {
 		BasicConfigurator.configure();
-		LoggingConfig.set(ReverseClassLoader.class, true);
-		LoggingConfig.set(ByteCodeRepository.class, true);
+//		LoggingConfig.set(ReverseClassLoader.class, true);
+//		LoggingConfig.set(ByteCodeRepository.class, true);
 	}
 	
 	/**
@@ -89,18 +90,7 @@ public class GmxSameHostRemoteVMTestCase {
 		return "service:jmx:rmi:///jndi/rmi://localhost:" + port + "/jmxrmi";
 	}
 	
-	/**
-	 * Compiles a closure from the passed script
-	 * @param script The closure script
-	 * @return a closure
-	 */
-	private Closure<?> compileClosure(CharSequence script) {
-		GroovyShell shell = new GroovyShell();
-		StringBuilder b = new StringBuilder("def clozure = {").append(script).append("}; return clozure;");
-		Closure<?> clozure = (Closure<?>)shell.evaluate(b.toString());
-		LOG.info("Compiled Closure [" + clozure.getClass().getName() + "]");
-		return clozure;
-	}
+
 	
     /**
      * Validates that the Runtime name of a launched JVM is the same as the launcher says it is.
@@ -140,15 +130,15 @@ public class GmxSameHostRemoteVMTestCase {
     	LaunchedJVMProcess jvmProcess = null;
     	try {
 	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(0).basicPortJmx(port).start();
-	    	Closure<?> domainClosure = compileClosure("return it.getDomains();");	    	
+	    	Closure<?> domainClosure = ClosureCompiler.compile("return it.getDomains();");	    	
 	    	gmx = Gmx.remote(jmxUrl(port));
-	    	String[] domains = gmx.getDomains();
-	    	Integer mbeanCount = gmx.getMBeanCount();
 	    	String[] remoteDomains = (String[])gmx.exec(domainClosure);
-//	    	Closure<?> mbeanCountClosure = compileClosure("return it.getMBeanCount();");
-//	    	Integer remoteMBeanCount = (Integer)gmx.exec(mbeanCountClosure);
-//	    	Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);
+	    	String[] domains = gmx.getDomains();	    	
 	    	Assert.assertArrayEquals("The remote Domain names" , domains, remoteDomains);
+	    	Closure<?> mbeanCountClosure = ClosureCompiler.compile("return it.getMBeanCount();");
+	    	Integer remoteMBeanCount = (Integer)gmx.exec(mbeanCountClosure);
+	    	Integer mbeanCount = gmx.getMBeanCount();
+	    	Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);	    	
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
