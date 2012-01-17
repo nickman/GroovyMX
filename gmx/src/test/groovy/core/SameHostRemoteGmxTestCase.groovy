@@ -1,13 +1,23 @@
-import org.junit.Test;
+import javax.management.ObjectName;
 
-import org.helios.gmx.*;
-import org.helios.gmx.util.*;
-import groovy.util.GroovyTestCase;
-import java.lang.management.*;
-import org.junit.*;
-import org.junit.rules.*;
-import org.apache.log4j.*;
-import org.helios.gmx.util.jvmcontrol.*;
+import java.lang.management.ManagementFactory;
+import java.util.Random;
+
+import javax.management.ObjectName;
+
+import org.apache.log4j.BasicConfigurator;
+import org.apache.log4j.Logger;
+import org.helios.gmx.Gmx;
+import org.helios.gmx.util.ClosureCompiler;
+import org.helios.gmx.util.JMXHelper;
+import org.helios.gmx.util.jvmcontrol.JVMLauncher;
+import org.helios.gmx.util.jvmcontrol.LaunchedJVMProcess;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TestName;
 
 /**
 Same Host, Remote VM Groovy Test Cases
@@ -79,7 +89,12 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 			def remoteMBeanCount = gmx.exec({ return it.getMBeanCount();});
 			def mbeanCount = gmx.getMBeanCount();
 			Assert.assertEquals("MBean Count", mbeanCount, remoteMBeanCount);
-			
+			remoteMBeanCount = gmx.exec({it, name, query -> return it.queryNames(name, query).size();}, null, null);
+			Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);
+			def gcWildcard = JMXHelper.objectName("java.lang:type=GarbageCollector,*");
+			def gcMbeanCount = gmx.queryNames(gcWildcard, null).size();
+			def gcRemoteMbeanCount = gmx.exec({it, name, query -> return it.queryNames(name, query).size();}, gcWildcard, null);
+			Assert.assertEquals("The GC MBeanCount", gcMbeanCount, gcRemoteMbeanCount);
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
