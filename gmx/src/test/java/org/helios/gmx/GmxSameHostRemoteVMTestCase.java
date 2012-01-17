@@ -128,14 +128,12 @@ public class GmxSameHostRemoteVMTestCase {
     	Gmx gmx = null;
     	LaunchedJVMProcess jvmProcess = null;
     	try {
-	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(0).basicPortJmx(port).start();
-	    	Closure<?> domainClosure = ClosureCompiler.compile("return it.getDomains();");	    	
+	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(0).basicPortJmx(port).start();	    		    
 	    	gmx = Gmx.remote(jmxUrl(port));
-	    	String[] remoteDomains = (String[])gmx.exec(domainClosure);
+	    	String[] remoteDomains = (String[])gmx.exec(ClosureCompiler.compile("return it.getDomains();"));
 	    	String[] domains = gmx.getDomains();	    	
 	    	Assert.assertArrayEquals("The remote Domain names" , domains, remoteDomains);
-	    	Closure<?> mbeanCountClosure = ClosureCompiler.compile("return it.getMBeanCount();");
-	    	Integer remoteMBeanCount = (Integer)gmx.exec(mbeanCountClosure);
+	    	Integer remoteMBeanCount = (Integer)gmx.exec(ClosureCompiler.compile("return it.getMBeanCount();"));
 	    	Integer mbeanCount = gmx.getMBeanCount();
 	    	Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);	    	
     	} finally {
