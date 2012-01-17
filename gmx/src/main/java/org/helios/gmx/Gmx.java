@@ -246,6 +246,16 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public static Gmx newInstance() {
 		return new Gmx(ManagementFactory.getPlatformMBeanServer());
 	}
+	
+	/**
+	 * Creates a new Gmx instance that wraps the passed MBeanServer
+	 * @param server The MBeanServer to wrap
+	 * @return a new MBeanServer wrapping Gmx.
+	 */
+	public static Gmx newInstance(MBeanServer server) {
+		return new Gmx(server);
+	}
+	
 
 	/**
 	 * Creates a new Gmx instance that wraps a local MBeanServer

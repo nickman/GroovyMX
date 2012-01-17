@@ -23,24 +23,20 @@
  *
  */
 package org.helios.gmx;
-import groovy.lang.Closure;
-import groovy.lang.GroovyShell;
-
 import java.lang.management.ManagementFactory;
 import java.util.Random;
 
+import javax.management.ObjectName;
+
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
-import org.helios.gmx.classloading.ByteCodeRepository;
-import org.helios.gmx.classloading.ReverseClassLoader;
 import org.helios.gmx.util.ClosureCompiler;
-import org.helios.gmx.util.LoggingConfig;
+import org.helios.gmx.util.JMXHelper;
 import org.helios.gmx.util.jvmcontrol.JVMLauncher;
 import org.helios.gmx.util.jvmcontrol.LaunchedJVMProcess;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
@@ -136,6 +132,14 @@ public class GmxSameHostRemoteVMTestCase {
 	    	Integer remoteMBeanCount = (Integer)gmx.exec(ClosureCompiler.compile("return it.getMBeanCount();"));
 	    	Integer mbeanCount = gmx.getMBeanCount();
 	    	Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);	    	
+	    	remoteMBeanCount = (Integer)gmx.exec(ClosureCompiler.compile("return it.queryNames(null, null).size();"));
+	    	Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);
+	    	remoteMBeanCount = (Integer)gmx.exec(ClosureCompiler.compile("it, name, query -> return it.queryNames(name, query).size();"), null, null);
+	    	Assert.assertEquals("The Remote MBeanCount", mbeanCount, remoteMBeanCount);
+	    	ObjectName gcWildcard = JMXHelper.objectName("java.lang:type=GarbageCollector,*");
+	    	Integer gcMbeanCount = gmx.queryNames(gcWildcard, null).size();
+	    	Integer gcRemoteMbeanCount = (Integer)gmx.exec(ClosureCompiler.compile("it, name, query -> return it.queryNames(name, query).size();"), gcWildcard, null);
+	    	Assert.assertEquals("The GC MBeanCount", gcMbeanCount, gcRemoteMbeanCount);
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		

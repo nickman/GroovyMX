@@ -79,6 +79,7 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 			def remoteMBeanCount = gmx.exec({ return it.getMBeanCount();});
 			def mbeanCount = gmx.getMBeanCount();
 			Assert.assertEquals("MBean Count", mbeanCount, remoteMBeanCount);
+			
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		

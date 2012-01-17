@@ -31,6 +31,7 @@ import groovy.lang.GroovyShell;
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
@@ -88,7 +89,12 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	protected int reverseClassLoadPort;
 	/** Invocation Context Classloader */
 	protected ClassLoader invocationContextClassLoader = null;
-	
+	/** The Gmx class */
+	protected final Class<?> gmxClass;
+	/** The Gmx newInstance method */
+	protected final Method newInstance;
+	/** The Gmx instance */
+	protected Object gmx;
 	
 	
 	/**
@@ -96,8 +102,8 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 * @param reverseClassLoadURL The URL of the reverse class loader
 	 */
 	public RemotableMBeanServer(URL reverseClassLoadURL) {
-		this.reverseClassLoadURL = reverseClassLoadURL;
-		classLoader = getClass().getClassLoader();
+		this();
+		this.reverseClassLoadURL = reverseClassLoadURL;		
 		reverseClassLoadHost = this.reverseClassLoadURL.getHost(); 
 		reverseClassLoadPort = this.reverseClassLoadURL.getPort();
 		invocationContextClassLoader = new URLClassLoader(new URL[]{this.reverseClassLoadURL}, classLoader);
@@ -108,6 +114,16 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 */
 	public RemotableMBeanServer() {
 		classLoader = getClass().getClassLoader();
+		try {
+			gmxClass = Class.forName("org.helios.gmx.Gmx");
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to load Gmx class", e);
+		}
+		try {
+			newInstance = gmxClass.getDeclaredMethod("newInstance", MBeanServer.class);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to reflect Gmx.newInstance method", e);
+		}
 	}
 	
 	/**
@@ -160,7 +176,7 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 			//Thread.currentThread().setContextClassLoader(invocationContextClassLoader);
 			int argsSize = (arguments==null ? 0 : arguments.length);
 			Object[] args = new Object[argsSize+1];
-			args[0] = server;
+			args[0] = gmx;
 			for(int i = 0; i < argsSize; i++) {
 				args[i+1] = arguments[i];
 			}
@@ -274,7 +290,12 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	@Override
 	public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
 		this.server = server;
-		objectName = name;		
+		objectName = name;	
+		try {
+			gmx = newInstance.invoke(null, server);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to instantiate Gmx", e);
+		}
 		return name;
 	}	
 
@@ -671,7 +692,7 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 */
 	public ObjectInstance registerMBean(Object object, ObjectName name)
 			throws InstanceAlreadyExistsException, MBeanRegistrationException,
-			NotCompliantMBeanException {
+			NotCompliantMBeanException {		
 		return server.registerMBean(object, name);
 	}
 
