@@ -1,3 +1,5 @@
+import org.junit.Test;
+
 import org.helios.gmx.*;
 import org.helios.gmx.util.*;
 import groovy.util.GroovyTestCase;
@@ -12,9 +14,11 @@ Same Host, Remote VM Groovy Test Cases
 Whitehead
 Jan 16, 2012
 */
+
 class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	/** The pid of the current VM */
 	def pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+	
 	
 	/** Tracks the test name */
 	@Rule
@@ -36,7 +40,6 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	 String jmxUrl(int port) {
 		return "service:jmx:rmi:///jndi/rmi://localhost:" + port + "/jmxrmi";
 	}
-	
 	
 	
     public void testSimpleJVMProcess() throws Exception {
@@ -69,15 +72,16 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
     	def jvmProcess = null;
     	try {
 	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(120000).basicPortJmx(port).start();
-	    		    	
 	    	gmx = Gmx.remote(jmxUrl(port));
-	    	String[] domains = gmx.getDomains();
-	    	Integer mbeanCount = gmx.getMBeanCount();
-	    	def domainClosure = { return it.getDomains(); };
-	    	gmx.installRemote();
-	    	//println "Pausing. PID:${jvmProcess.processId}";
-	    	//Thread.sleep(120000);
-	    	def remoteDomains = gmx.exec(domainClosure);
+	    	
+	    		    	
+	    	def remoteDomains = gmx.exec({ return it.getDomains();});
+			def domains = gmx.getDomains();
+			Assert.assertArrayEquals("Domain array", domains, remoteDomains);
+			
+			def remoteMBeanCount = gmx.exec({ return it.getMBeanCount();});
+			def mbeanCount = gmx.getMBeanCount();
+			Assert.assertEquals("MBean Count", mbeanCount, remoteMBeanCount);
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		

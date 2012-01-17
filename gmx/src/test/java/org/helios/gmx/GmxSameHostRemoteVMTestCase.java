@@ -95,7 +95,7 @@ public class GmxSameHostRemoteVMTestCase {
     /**
      * Validates that the Runtime name of a launched JVM is the same as the launcher says it is.
      */
-    @Test(timeout=10000)    
+    @Test(timeout=20000)    
     public void testSimpleJVMProcess() throws Exception {
     	int port = 18900;
     	Gmx gmx = null;
@@ -122,8 +122,7 @@ public class GmxSameHostRemoteVMTestCase {
     /**
      * Validates simple remote closure execution against a foreign JVM by comparing MBean count and Domains.
      */
-    @Test//(timeout=10000)
-    //@Ignore
+    @Test(timeout=20000)
     public void testRemoteClosureForMBeanCountAndDomains() throws Exception {
     	int port = 18900;
     	Gmx gmx = null;
