@@ -73,12 +73,9 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
     	try {
 	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(120000).basicPortJmx(port).start();
 	    	gmx = Gmx.remote(jmxUrl(port));
-	    	
-	    		    	
 	    	def remoteDomains = gmx.exec({ return it.getDomains();});
 			def domains = gmx.getDomains();
 			Assert.assertArrayEquals("Domain array", domains, remoteDomains);
-			
 			def remoteMBeanCount = gmx.exec({ return it.getMBeanCount();});
 			def mbeanCount = gmx.getMBeanCount();
 			Assert.assertEquals("MBean Count", mbeanCount, remoteMBeanCount);
