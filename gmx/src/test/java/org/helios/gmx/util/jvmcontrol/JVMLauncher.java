@@ -26,12 +26,18 @@ package org.helios.gmx.util.jvmcontrol;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.management.ManagementFactory;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+
+import org.helios.gmx.util.ByteCodeNet;
 
 /**
  * <p>Title: JVMLauncher</p>
@@ -67,6 +73,13 @@ public class JVMLauncher {
 	public static final String THIS_JAVA_EXEC = System.getProperty("java.home") + File.separator + "bin" + File.separator + (IS_WINDOWS ? "javaw.exe" : "java");
 	/** The Debug option template */
 	public static String DEBUG_OPTION = "-Xrunjdwp:transport=dt_socket,address=%s,server=%s,suspend=%s";
+	/** The eol character for this platform */
+	public static final String EOL = System.getProperty("line.separator", "\n");
+	/** The temp directory for this environment */
+	public static final File TMP_DIR = new File(System.getProperty("java.io.tmpdir"));
+	/** The runtime name */
+	public static final String JVM_NAME = ManagementFactory.getRuntimeMXBean().getName();
+	
 	
 	/**
 	 * Creates a new JVMLauncher
@@ -229,9 +242,8 @@ public class JVMLauncher {
 				processBuilder.command().add("-Xdebug");
 				processBuilder.command().add(debugOption);
 			}
-			if(classpath.length()<1) {
-				classpath.append(System.getProperty("java.class.path"));
-			}
+			String mainClassDir = writeMainClass();
+			classpath.append(File.pathSeparator).append(mainClassDir);
 			processBuilder.command().add("-cp");
 			processBuilder.command().add(classpath.toString());
 			if(!sysProps.isEmpty()) {
@@ -254,8 +266,16 @@ public class JVMLauncher {
 				}
 			}
 			System.out.println("Starting:\n" + processBuilder.command());
+			String pid = null;
 			process = processBuilder.start();
-			String pid = getPid(process);
+			try {				
+				pid = getPid(process);
+			} catch (Exception e) {
+				String errMsg = getError(process);
+				process.destroy();
+				throw new RuntimeException("Failed to start JVM [" + errMsg + "]", e);
+			}
+			
 			
 			return LaunchedJVMProcess.newInstance("" + pid, process, processBuilder.command());
 		} catch (Exception e) {
@@ -286,14 +306,40 @@ public class JVMLauncher {
 				}
 			}
 			return line;
-		} catch (Exception e) {
-			process.destroy();
+		} catch (Exception e) {			
 			throw new RuntimeException("Failed to get PID from process", e);
 		} finally {
 			if(br!=null) try { br.close(); } catch (Exception e) {}
 			if(isr!=null) try { isr.close(); } catch (Exception e) {}
 		}
 	}
+	
+	
+	/**
+	 * Reads the process error stream and returns it as a string.
+	 * @param process The process to read the error stream from
+	 * @return the error stream content
+	 */
+	protected String getError(Process process) {		
+		InputStreamReader isr = null;
+		BufferedReader br = null;
+		StringBuilder b = new StringBuilder("JVM Start Error:");
+		try {
+			isr = new InputStreamReader(process.getErrorStream());
+			br = new BufferedReader(isr);
+			String line = null;
+			while((line = br.readLine())!=null) {		
+				b.append("\n").append(line);
+			}
+			return b.toString();
+		} catch (Exception e) {			
+			throw new RuntimeException("Failed to read process error stream", e);
+		} finally {
+			if(br!=null) try { br.close(); } catch (Exception e) {}
+			if(isr!=null) try { isr.close(); } catch (Exception e) {}
+		}
+	}
+	
 	
 	
 	
@@ -335,6 +381,48 @@ public class JVMLauncher {
 		try { Thread.sleep(3000); } catch (Exception e) {} 
 		System.out.println(jvm);
 		try { jvm.waitFor(); } catch (Exception e) {}
+	}
+	
+	/**
+	 * Writes out a temporary file with the MainTimeoutAndExit class
+	 * @return the name of the directory with the root of the classpath
+	 */
+	protected String writeMainClass() {
+		StringBuilder b = new StringBuilder();
+		File classFile = null;
+		FileOutputStream fos = null;
+		
+		try {
+			File jvmDir = new File(TMP_DIR + File.separator + JVM_NAME);
+			if(jvmDir.exists()) {
+				jvmDir.delete();
+			}
+			jvmDir.mkdir();
+			jvmDir.deleteOnExit();
+			b.append(jvmDir.getAbsolutePath());
+			for(String pkg: MainTimeoutAndExit.class.getPackage().getName().split("\\.")) {
+				b.append(File.separator).append(pkg);
+			}
+			new File(b.toString()).mkdirs();
+			b.append(File.separator).append(MainTimeoutAndExit.class.getSimpleName()).append(".class");
+			classFile = new File(b.toString());
+			fos = new FileOutputStream(classFile);
+			URL codeSource = MainTimeoutAndExit.class.getProtectionDomain().getCodeSource().getLocation();
+			System.out.println("MainTimeoutAndExit CodeSource URL [" + codeSource + "]");
+			Map<String, byte[]> classBytes = ByteCodeNet.getClassBytes(MainTimeoutAndExit.class);
+			//fos.write(classBytes);
+			fos.flush();
+			fos.close();
+			System.out.println("MainTimeoutAndExit class file [" + classFile.getAbsolutePath() + "]");
+			return jvmDir.getAbsolutePath();			
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to write main class", e);
+		} finally {
+			if(fos!=null) {
+				try { fos.flush(); } catch (Exception e) {}
+				try { fos.close(); } catch (Exception e) {}
+			}
+		}
 	}
 
 }

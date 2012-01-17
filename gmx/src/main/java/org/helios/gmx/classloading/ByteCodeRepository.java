@@ -29,6 +29,7 @@ import groovyjarjarasm.asm.ClassReader;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
+import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
 import java.lang.management.ManagementFactory;
 import java.security.ProtectionDomain;
@@ -93,6 +94,14 @@ public class ByteCodeRepository implements ClassFileTransformer {
 			}
 		}
 		return instance;
+	}
+	
+	/**
+	 * Returns the instrumentation instance
+	 * @return the instrumentation instance
+	 */
+	public Instrumentation getInstrumentation() {
+		return agentInstrumentation.getInstrumentation();
 	}
 	
 	/**

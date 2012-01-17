@@ -234,7 +234,7 @@ public class LoggingConfig {
 					b.append(objs[i].toString());
 				}
 			}
-			stream.print(b.toString());
+			stream.println(b.toString());
 		}
 		
 		/**

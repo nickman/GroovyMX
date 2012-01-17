@@ -506,7 +506,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
 		dehydrator.dehydrate(closure);
 		byte[] closureByteCode = ByteCodeRepository.getInstance().getByteCode(closure.getClass()); 
-		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closureByteCode, arguments});
+		//return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closureByteCode, arguments});
+		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, arguments});
 	}
 	
 	// =========================================================================================
@@ -939,8 +940,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param connNot The connection notification
 	 */
 	public void onConnectionClosed(JMXConnectionNotification connNot) {
-		//System.out.println("Connection Closed:" + connNot);
-		close();
+		System.out.println("Connection Closed:" + connNot);
+		//close();
 	}
 
 	/**
@@ -949,7 +950,7 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 */
 	public void onConnectionFailed(JMXConnectionNotification connNot) {
 		System.out.println("Connection Failed:" + connNot);
-		close();
+		//close();
 	}
 	
 	/**

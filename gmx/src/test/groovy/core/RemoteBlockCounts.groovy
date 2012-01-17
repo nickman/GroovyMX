@@ -3,9 +3,12 @@ import java.lang.management.*;
 import org.helios.vm.agent.*;
 import org.helios.vm.*;
 import org.helios.gmx.classloading.*;
+import org.helios.gmx.util.LoggingConfig;
 
 //VirtualMachineBootstrap.findAttachAPI();
 //ReverseClassLoader.getInstance();
+LoggingConfig.set(ReverseClassLoader.class, true);
+LoggingConfig.set(ByteCodeRepository.class, true);
 
 Gmx gmx = null;
 VirtualMachine.list().each() {
@@ -25,6 +28,7 @@ if(gmx!=null) {
 			return cntr;
 		});
 		println "Block Count:$blockCount"
+		Thread.sleep(20000);
 	} finally {
 		if(gmx!=null) try { gmx.close(); } catch (e) {}
 	}

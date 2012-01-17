@@ -152,10 +152,12 @@ public class RemotableMBeanServer implements RemotableMBeanServerMBean, Serializ
 	 * @param arguments optional arguments
 	 * @return the return value of the closure
 	 */
+	@Override
 	public Object invokeClosure(Closure<?> closure, Object[] arguments) {
+		System.out.println("\n\tInvoking Closure\n");
 		ClassLoader current = Thread.currentThread().getContextClassLoader();		
 		try {
-			Thread.currentThread().setContextClassLoader(invocationContextClassLoader);
+			//Thread.currentThread().setContextClassLoader(invocationContextClassLoader);
 			int argsSize = (arguments==null ? 0 : arguments.length);
 			Object[] args = new Object[argsSize+1];
 			args[0] = server;
