@@ -29,7 +29,7 @@ import groovy.lang.Closure;
 import java.io.Serializable;
 
 import javax.management.Notification;
-import javax.management.NotificationListener;
+import javax.management.ObjectName;
 
 /**
  * <p>Title: ClosureWrappingNotificationListener</p>
@@ -38,24 +38,29 @@ import javax.management.NotificationListener;
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>org.helios.gmx.jmx.ClosureWrappingNotificationListener</code></p>
  */
-public class ClosureWrappingNotificationListener implements Serializable, NotificationListener {
+public class ClosureWrappingNotificationListener implements Serializable, ObjectNameAwareListener {
 	/**  */
 	private static final long serialVersionUID = 8086336838224760998L;
 	/** The wrapped closure */
 	protected final Closure<?> closure;
 	/** Additional closure arguments */
 	protected final Object[] arguments;
+	/** The ObjectName this listener was registered on */
+	protected final ObjectName objectName;
+	
 	
 	
 	
 	/**
 	 * Creates a new ClosureWrappingNotificationListener
+	 * @param objectName The ObjectName this listener was registered on
 	 * @param closure The wrapped closure
 	 * @param arguments Additional closure arguments
 	 */
-	public ClosureWrappingNotificationListener(Closure<?> closure, Object...arguments) {
+	public ClosureWrappingNotificationListener(ObjectName objectName, Closure<?> closure, Object...arguments) {
 		this.closure = closure;
 		this.arguments = arguments;
+		this.objectName = objectName;		
 	}
 
 
@@ -66,8 +71,26 @@ public class ClosureWrappingNotificationListener implements Serializable, Notifi
 	 */
 	@Override
 	public void handleNotification(Notification notification, Object handback) {
-		// TODO Auto-generated method stub
-		
+		Object[] args = new Object[2 + (arguments==null ? 0 : arguments.length)];
+		args[0] = notification;
+		args[1] = handback;
+		if(arguments!=null) {
+			System.arraycopy(arguments, 0, args, 2, arguments.length);
+		}
+		closure.call(args);		
 	}
+
+
+
+	/**
+	 * Returns the ObjectName this listener was registered on 
+	 * @return the ObjectName this listener was registered on 
+	 */
+	@Override
+	public ObjectName getObjectName() {
+		return objectName;
+	}
+	
+	
 
 }

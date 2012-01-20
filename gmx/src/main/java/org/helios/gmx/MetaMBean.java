@@ -24,11 +24,11 @@
  */
 package org.helios.gmx;
 
+import groovy.lang.Closure;
 import groovy.lang.GroovyObject;
 import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
 
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,7 +48,7 @@ import javax.management.MBeanOperationInfo;
 import javax.management.MBeanParameterInfo;
 import javax.management.ObjectName;
 
-import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
+import org.helios.gmx.jmx.ObjectNameAwareListener;
 import org.helios.gmx.util.JMXHelper;
 import org.helios.gmx.util.Primitive;
 
@@ -441,6 +441,33 @@ public class MetaMBean implements GroovyObject {
 			return opName;
 		}
 	}
+	
+	/**
+	 * Registers a notification listener with the MBeanServer on the MBean represented by this MetaMBean
+	 * @param listener A closure that will passed the notification and handback.
+	 * @param filter A closure that will be passed the notification to determine if it should be filtered or not. If null, no filtering will be performed before handling notifications.
+	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
+	 * @return The wrapped listener that can be used to unregister the listener
+	 */
+	public ObjectNameAwareListener addNotificationListener(Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+		if(gmx.isRemote()) {
+			if(!gmx.isRemoted()) {
+				gmx.installRemote();
+			}			
+		}
+		return gmx.addNotificationListener(objectName.toString(), listener, filter, handback);				
+	}
+	
+	/**
+	 * Registers a notification listener with the MBeanServer on the MBean represented by this MetaMBean
+	 * @param listener A closure that will passed the notification and handback.
+	 * @return The wrapped listener that can be used to unregister the listener
+	 */
+	public ObjectNameAwareListener addNotificationListener(Closure<Void> listener) {
+		return addNotificationListener(listener, null, null);
+	}
+	
+	
 
 	/**
 	 * Constructs a <code>String</code> with key attributes in name = value format.

@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -74,6 +75,9 @@ import javax.management.remote.JMXServiceURL;
 
 import org.helios.gmx.classloading.ByteCodeRepository;
 import org.helios.gmx.classloading.ReverseClassLoader;
+import org.helios.gmx.jmx.ClosureWrappingNotificationFilter;
+import org.helios.gmx.jmx.ClosureWrappingNotificationListener;
+import org.helios.gmx.jmx.ObjectNameAwareListener;
 import org.helios.gmx.jmx.RuntimeMBeanServer;
 import org.helios.gmx.jmx.RuntimeMBeanServerConnection;
 import org.helios.gmx.util.ClosureDehydrator;
@@ -127,6 +131,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	
 	/** The closure dehydrator */
 	protected final ClosureDehydrator dehydrator = new ClosureDehydrator();
+	/** A map of sets of registered JMX notification listeners  */
+	protected final Map<ObjectName, Set<ObjectNameAwareListener>> registeredNotificationListeners = new ConcurrentHashMap<ObjectName, Set<ObjectNameAwareListener>>();
 	
 	
 	/** The platform MBeanServer Default Domain Name */
@@ -515,9 +521,58 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public <T> T invokeRemoteClosure(Closure<T> closure, Object...arguments) {
 		if(closure==null) throw new IllegalArgumentException("The passed closure was null", new Throwable());
 		dehydrator.dehydrate(closure);
-		byte[] closureByteCode = ByteCodeRepository.getInstance().getByteCode(closure.getClass()); 
-		//return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closureByteCode, arguments});
 		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, arguments});
+	}
+	
+	
+	/**
+	 * Registers a notification listener with the MBeanServer
+	 * @param objectName The JMX ObjectName that represents the MBeans from which to receive notifications
+	 * @param listener A closure that will passed the notification and handback.
+	 * @param filter A closure that will be passed the notification to determine if it should be filtered or not. If null, no filtering will be performed before handling notifications.
+	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
+	 * @return The wrapped listener that can be used to unregister the listener
+	 */
+	public ObjectNameAwareListener addNotificationListener(CharSequence objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+		if(isRemote()) {
+			if(!isRemoted()) {
+				installRemote();
+			}			
+		}
+		ObjectName on = JMXHelper.objectName(objectName);
+		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(on, dehydrator.dehydrate(listener));
+		_addRegisteredListener(onAwareListener);
+		mbeanServerConnection.addNotificationListener(on, onAwareListener, new ClosureWrappingNotificationFilter(dehydrator.dehydrate(filter)), handback);
+		return onAwareListener;
+	}
+	
+	/**
+	 * Registers a notification listener with the MBeanServer
+	 * @param objectName The JMX ObjectName that represents the MBeans from which to receive notifications
+	 * @param listener A closure that will passed the notification and handback.
+	 * @return The wrapped listener that can be used to unregister the listener
+	 */
+	public ObjectNameAwareListener addNotificationListener(CharSequence objectName, Closure<Void> listener) {
+		return addNotificationListener(objectName, listener, null, null);
+	}
+	
+	
+	/**
+	 * Stores a registered JMX {@link NotificationListener} keyed by {@link ObjectName}.
+	 * @param listener The {@link NotificationListener} that was registered
+	 */
+	protected void _addRegisteredListener(ObjectNameAwareListener listener) {
+		Set<ObjectNameAwareListener> listeners = registeredNotificationListeners.get(listener.getObjectName());
+		if(listeners==null) {
+			synchronized(registeredNotificationListeners) {
+				listeners = registeredNotificationListeners.get(listener.getObjectName());
+				if(listeners==null) {
+					listeners = new CopyOnWriteArraySet<ObjectNameAwareListener>();
+					registeredNotificationListeners.put(listener.getObjectName(), listeners);
+				}
+			}
+		}
+		listeners.add(listener);
 	}
 	
 	// =========================================================================================

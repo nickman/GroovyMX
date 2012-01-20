@@ -24,6 +24,8 @@
  */
 package org.helios.gmx.util;
 
+import groovy.lang.Closure;
+
 import java.lang.reflect.Field;
 
 /**
@@ -63,13 +65,16 @@ public class ClosureDehydrator {
 	/**
 	 * If the passed object is a closure, it will be dehydrated by setting the referenced fields to null
 	 * @param clozure The clozure to dehydrate. Ignored if null or not a closure.
+	 * @return The dehydated closure or null
 	 */
-	public void dehydrate(Object clozure) {
+	public Closure<?> dehydrate(Object clozure) {
 		if(clozure != null && clozureClazz.isAssignableFrom(clozure.getClass())) {
 			try { delegateField.set(clozure, null); } catch (Exception e) {}
 			try { ownerField.set(clozure, null); } catch (Exception e) {}
 			try { thisObjectField.set(clozure, null); } catch (Exception e) {}
+			return (Closure<?>) clozure;
 		}
+		return null;		
 	}
 	
 	public static Field getField(Class<?> clazz, String fieldName) {
