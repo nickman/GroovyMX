@@ -18,7 +18,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-
+import org.helios.gmx.notifications.TestNotificationService;
 /**
 Same Host, Remote VM Groovy Test Cases
 Whitehead
@@ -100,6 +100,34 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
     	}
     }
+    
+    public void testRemoteNotificationListener() throws Exception {
+    	def port = 18900;
+    	def gmx = null;
+    	def jvmProcess = null;
+    	try {
+	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(120000).basicPortJmx(port).start();
+	    	gmx = Gmx.remote(jmxUrl(port));
+	    	gmx.installRemote();
+	    	 
+	    	def objectName = TestNotificationService.register(gmx.mbeanServer);
+	    	def tns = gmx.mbean(objectName);
+	    	def userData = null;
+	    	def userDataReference = System.nanoTime();
+	    	gmx.addNotificationListener(objectName, {
+	    		println "\n\t**********************\n\tRemote notification\n\t**********************\n";
+	    		userData = it.getUserData();
+	    	});
+	    	Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+	    	tns.sendMeANotification(userDataReference);
+	    	Assert.assertEquals("The user data in the received notification", userDataReference, userData);
+	    	
+    	} finally {
+    		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+    		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
+    	}
+    }
+    
     
 
 }

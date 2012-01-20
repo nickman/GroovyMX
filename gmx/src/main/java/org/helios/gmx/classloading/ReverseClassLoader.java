@@ -481,7 +481,11 @@ public class ReverseClassLoader extends AbstractHandler  {
 		if(!gmx.getMBeanServerConnection().isRegistered(mbeanServerOn)) {
 			gmx.getMBeanServerConnection().createMBean(RemotableMBeanServer.class.getName(), mbeanServerOn, classLoaderOn, new Object[]{baseURL}, new String[]{URL.class.getName()});
 		}
-		gmx.installedRemote(classLoaderOn, mbeanServerOn);
+		try {
+			gmx.installedRemote(classLoaderOn, mbeanServerOn);			
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to invoke callback on Gmx install remote", e);
+		}
 	}
 
 

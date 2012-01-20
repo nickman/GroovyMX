@@ -85,6 +85,30 @@ public class JMXHelper {
 		}
 	}
 	
+	/**
+	 * Generates a new ObjectName for the passed class in the format:</br>
+	 * <pre>&lt;package-name>:name=&lt;simple-class-name></pre>
+	 * @param clazz The class to generate the ObjectName for
+	 * @return an ObjectName
+	 */
+	public static ObjectName getName(Class<?> clazz) {
+		return objectName(new StringBuilder(clazz.getPackage().getName()).append(":name=").append(clazz.getSimpleName()));
+	}
+	
+	/**
+	 * Generates a (more or less) new ObjectName for the passed object in the format:</br>
+	 * <pre>&lt;package-name>:name=&lt;simple-class-name>,id=&lt;object-hash-code></pre>
+	 * @param obj The object to generate the ObjectName for
+	 * @return an ObjectName
+	 */
+	public static ObjectName getName(Object obj) {
+		Class<?> clazz = obj.getClass();
+		return objectName(new StringBuilder(clazz.getPackage().getName())
+		.append(":name=").append(clazz.getSimpleName())
+		.append(",id=").append(System.identityHashCode(obj)));
+	}
+
+	
 	
 	/**
 	 * Creates a new JMXServiceURL

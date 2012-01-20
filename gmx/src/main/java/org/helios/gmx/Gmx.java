@@ -35,6 +35,9 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -460,6 +463,15 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	public void installedRemote(ObjectName remoteClassLoaderOn, ObjectName remoteMBeanServerOn) {
 		remoteClassLoader = mbean(remoteClassLoaderOn);
 		remotedMBeanServer = mbean(remoteMBeanServerOn);
+		final MetaMBean finalBean = this.remotedMBeanServer;
+		this.mbeanServer = RuntimeMBeanServer.getInstance(
+		(MBeanServer) Proxy.newProxyInstance(remotedMBeanServer.getClass().getClassLoader(), new Class<?>[]{MBeanServer.class}, new InvocationHandler(){
+			public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+				return finalBean.invokeMethod(method.getName(), args);
+			}
+		}));
+		System.out.println("Created remoted MBeanServer proxy [" + this.mbeanServer + "]");
+		
 	}
 	
 	/**
@@ -524,7 +536,6 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		return (T)remotedMBeanServer.invokeMethod("invokeClosure", new Object[]{closure, arguments});
 	}
 	
-	
 	/**
 	 * Registers a notification listener with the MBeanServer
 	 * @param objectName The JMX ObjectName that represents the MBeans from which to receive notifications
@@ -534,27 +545,50 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
 	public ObjectNameAwareListener addNotificationListener(CharSequence objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
-		if(isRemote()) {
-			if(!isRemoted()) {
-				installRemote();
-			}			
-		}
-		ObjectName on = JMXHelper.objectName(objectName);
-		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(on, dehydrator.dehydrate(listener));
-		_addRegisteredListener(onAwareListener);
-		mbeanServerConnection.addNotificationListener(on, onAwareListener, new ClosureWrappingNotificationFilter(dehydrator.dehydrate(filter)), handback);
-		return onAwareListener;
+		return addNotificationListener(JMXHelper.objectName(objectName), listener, filter, handback);
 	}
 	
 	/**
 	 * Registers a notification listener with the MBeanServer
 	 * @param objectName The JMX ObjectName that represents the MBeans from which to receive notifications
 	 * @param listener A closure that will passed the notification and handback.
+	 * @param filter A closure that will be passed the notification to determine if it should be filtered or not. If null, no filtering will be performed before handling notifications.
+	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
+	 * @return The wrapped listener that can be used to unregister the listener
+	 */
+	public ObjectNameAwareListener addNotificationListener(ObjectName objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+		if(isRemote()) {
+			if(!isRemoted()) {
+				installRemote();
+			}			
+		}
+		
+		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(objectName, dehydrator.dehydrate(listener));
+		_addRegisteredListener(onAwareListener);
+		mbeanServerConnection.addNotificationListener(objectName, onAwareListener, new ClosureWrappingNotificationFilter(dehydrator.dehydrate(filter)), handback);
+		return onAwareListener;
+	}
+	
+	/**
+	 * Registers a JMX {@link NotificationListener} with the {@link MBeanServer}
+	 * @param objectName The JMX {@link ObjectName} that represents the MBeans from which to receive notifications
+	 * @param listener A closure that will passed the notification and handback.
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
 	public ObjectNameAwareListener addNotificationListener(CharSequence objectName, Closure<Void> listener) {
 		return addNotificationListener(objectName, listener, null, null);
 	}
+	
+	/**
+	 * Registers a JMX {@link NotificationListener} with the {@link MBeanServer}
+	 * @param objectName The JMX {@link ObjectName} that represents the MBeans from which to receive notifications
+	 * @param listener A closure that will passed the notification and handback.
+	 * @return The wrapped listener that can be used to unregister the listener
+	 */
+	public ObjectNameAwareListener addNotificationListener(ObjectName objectName, Closure<Void> listener) {
+		return addNotificationListener(objectName, listener, null, null);
+	}
+	
 	
 	
 	/**
@@ -1143,8 +1177,19 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param remotedMBeanServer the MetaMBean for the remoted MBeanServer on this remote server
 	 */
 	protected void installedRemotes(MetaMBean remoteClassLoader, MetaMBean remotedMBeanServer) {
-		this.remoteClassLoader = remoteClassLoader;
-		this.remotedMBeanServer = remotedMBeanServer;
+		try {
+			this.remoteClassLoader = remoteClassLoader;
+			this.remotedMBeanServer = remotedMBeanServer;
+			final MetaMBean finalBean = this.remotedMBeanServer; 
+			this.mbeanServer = (RuntimeMBeanServer) Proxy.newProxyInstance(remotedMBeanServer.getClass().getClassLoader(), new Class<?>[]{RuntimeMBeanServer.class}, new InvocationHandler(){
+				public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+					return finalBean.invokeMethod(method.getName(), args);
+				}
+			});
+			System.out.println("Created remoted MBeanServer proxy [" + this.mbeanServer + "]");
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to handle callback on remote install", e);
+		}
 	}
 	
 	/**
