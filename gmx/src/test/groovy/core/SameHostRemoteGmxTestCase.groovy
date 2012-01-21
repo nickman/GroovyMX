@@ -178,7 +178,24 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 		   latch.await(5000, TimeUnit.MILLISECONDS);
 		   Assert.assertEquals("The user data in the received notification", userDataReference, userData);
 		   Assert.assertEquals("The handback", "bar", handback);
-		   
+		   //======= Test the same against the MetaBean =======
+		   latch = new CountDownLatch(1);
+		   objectName = NotificationTriggerService.register(gmx.mbeanServer);
+		   tns = gmx.mbean(objectName);
+		   userData = null;
+		   handback = "foo";
+		   userDataReference = System.nanoTime();
+		   listener = tns.addListener({n, h ->
+			   userData = n.getUserData();
+			   handback = h;
+			   latch.countDown();
+		   }, null, "bar");
+		   Assert.assertTrue("The handback expected of the listener", listener.isExpectHandback());
+		   Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+		   tns.sendMeANotification(userDataReference);
+		   latch.await(5000, TimeUnit.MILLISECONDS);
+		   Assert.assertEquals("The user data in the received notification", userDataReference, userData);
+		   Assert.assertEquals("The handback", "bar", handback);
 	   } finally {
 		   if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
 	   }
@@ -208,8 +225,7 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 		   Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
 		   tns.sendMeANotification(userDataReference);
 		   latch.await(5000, TimeUnit.MILLISECONDS);
-		   Assert.assertEquals("The user data in the received notification", userDataReference, userData);
-		   
+		   Assert.assertEquals("The user data in the received notification", userDataReference, userData);		   
 	   } finally {
 		   if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
 	   }
@@ -313,6 +329,38 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	  Assert.assertEquals("The exception error message", exception.getMessage(), String.format(Gmx.INVALID_ARG_COUNT_TEMPLATE, 1, 1, 0));
   }
 
+  /**
+  * Tests a simple notification listener registration with a closured notification filter
+  * @throws Exception thrown on any error
+  */
+ @Test(timeout=5000L)
+ public void testRemoteNotificationListenerWithFilter() throws Exception {
+	 def gmx = null;
+	 def latch = new CountDownLatch(1);
+	 try {
+		 gmx = Gmx.remote(jmxUrl(port));
+		 gmx.installRemote();
+		 def objectName = NotificationTriggerService.register(gmx.mbeanServer);
+		 def tns = gmx.mbean(objectName);
+		 def filteredResults = [];
+		 def sendValues = 0..10;
+		 def expectedReturn = [];
+		 sendValues.each() {
+			 if(it%2==0) expectedReturn.add(it);
+		 }
+		 def listener = gmx.addListener(objectName, {filteredResults.add(it.getUserData())}, {return it.getUserData()%2==0;}, null);
+		 Assert.assertFalse("The handback expected of the listener", listener.isExpectHandback());
+		 Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+		 sendValues.each() {
+			 tns.sendMeANotification(it);
+		 }		 
+		 latch.await(5000, TimeUnit.MILLISECONDS);
+		 println "Filtered Results:${filteredResults}";
+		 Assert.assertArrayEquals("The sum of numbers calculated", expectedReturn as int[], filteredResults as int[]);
+	 } finally {
+		 if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+	 }
+ }
 
 
 }
