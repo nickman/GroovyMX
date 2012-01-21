@@ -2,6 +2,8 @@ import javax.management.ObjectName;
 
 import java.lang.management.ManagementFactory;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.management.ObjectName;
 
@@ -14,11 +16,11 @@ import org.helios.gmx.util.jvmcontrol.JVMLauncher;
 import org.helios.gmx.util.jvmcontrol.LaunchedJVMProcess;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-import org.helios.gmx.notifications.TestNotificationService;
+import org.helios.gmx.notifications.NotificationTriggerService;
 /**
 Same Host, Remote VM Groovy Test Cases
 Whitehead
@@ -29,7 +31,15 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	/** The pid of the current VM */
 	def pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
 	
-	
+	/** The test JVM these tests will remote against */
+	static def jvmProcess = null;
+	/** The port that the management agent will listen on in the test JVM */
+	static def port = 18901;
+	/** The number of test methods in this script */
+	def testCount = countTestCases();
+	/** The number of test methods executed */
+	def testsExecuted = 0;
+
 	/** Tracks the test name */
 	@Rule
 	def testName= new TestName();
@@ -39,11 +49,26 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	
 	static {
 		BasicConfigurator.configure();
-	   }
+	}
+
+	@After
+	void afterTest() {
+		if(testsExecuted==testCount) {
+			if(jvmProcess!=null) {
+				try { jvmProcess.destroy(); } catch (e) {};
+			}
+		}
+	}
 	
 	@Before
-	void setUp() {
-		String methodName = getMethodName();	
+	void setUp() {		
+		String methodName = getMethodName();
+		if(testsExecuted<1) {
+			if(jvmProcess==null) {
+				jvmProcess = JVMLauncher.newJVMLauncher().timeout(120000).basicPortJmx(port).shutdownHook().start();
+			}
+		}
+		testsExecuted++;
 		LOG.debug("\n\t******\n\t Test [" + getClass().getSimpleName() + "." + methodName + "]\n\t******");
 	}
 	
@@ -51,13 +76,10 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 		return "service:jmx:rmi:///jndi/rmi://localhost:" + port + "/jmxrmi";
 	}
 	
-	
+	@Test
     public void testSimpleJVMProcess() throws Exception {
-    	def port = 18900;
     	def gmx = null;
-    	def jvmProcess = null;
     	try {
-	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(5000).basicPortJmx(port).start();
     		def remotePid = jvmProcess.getProcessId();
 	    	gmx = Gmx.remote(jmxUrl(port));
 	    	def remoteRuntimeName = gmx.mbean(ManagementFactory.RUNTIME_MXBEAN_NAME).Name;
@@ -65,23 +87,16 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	    	assert remotePid.equals(remoteRuntimePid);
 	    	assert gmx.getJvmName().equals(remoteRuntimeName);	    	
 	    	if(gmx!=null) try { gmx.close(); gmx = null; } catch (Exception e) {}
-	    	def exitCode = jvmProcess.stop();
-	    	jvmProcess = null;
-	    	assert 0==exitCode;
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
-    		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
     	}
     }
     
 	
-	
+	@Test(timeout=5000L)
     public void testRemoteClosureForMBeanCountAndDomains() throws Exception {
-    	def port = 18900;
     	def gmx = null;
-    	def jvmProcess = null;
     	try {
-	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(120000).basicPortJmx(port).start();
 	    	gmx = Gmx.remote(jmxUrl(port));
 	    	def remoteDomains = gmx.exec({ return it.getDomains();});
 			def domains = gmx.getDomains();
@@ -97,38 +112,69 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 			Assert.assertEquals("The GC MBeanCount", gcMbeanCount, gcRemoteMbeanCount);
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
-    		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
     	}
     }
-    
-    public void testRemoteNotificationListener() throws Exception {
-    	def port = 18900;
-    	def gmx = null;
-    	def jvmProcess = null;
-    	try {
-	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(120000).basicPortJmx(port).start();
+	
+	/**
+	 * Tests a simple notification listener registration with an expected (but null) handback
+	 * @throws Exception thrown on any error
+	 */
+	@Test(timeout=5000L)
+    public void testRemoteNotificationListenerExpectedHandback() throws Exception {    	
+    	def gmx = null;    	
+		def latch = new CountDownLatch(1);
+    	try {	    	
 	    	gmx = Gmx.remote(jmxUrl(port));
 	    	gmx.installRemote();
-	    	 
-	    	def objectName = TestNotificationService.register(gmx.mbeanServer);
+	    	def objectName = NotificationTriggerService.register(gmx.mbeanServer);
 	    	def tns = gmx.mbean(objectName);
 	    	def userData = null;
 	    	def userDataReference = System.nanoTime();
-	    	gmx.addNotificationListener(objectName, {
-	    		println "\n\t**********************\n\tRemote notification\n\t**********************\n";
-	    		userData = it.getUserData();
-	    	});
+	    	def listener  = gmx.addListener(objectName, {n, h ->
+	    		userData = n.getUserData();
+				latch.countDown();
+	    	}, null, 1);
+			Assert.assertTrue("The handback expected of the listener", listener.isExpectHandback());
 	    	Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
 	    	tns.sendMeANotification(userDataReference);
+			latch.await(5000, TimeUnit.MILLISECONDS);
 	    	Assert.assertEquals("The user data in the received notification", userDataReference, userData);
 	    	
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
-    		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
     	}
     }
     
-    
+	/**
+	* Tests a simple notification listener registration with an non-expected handback
+	* @throws Exception thrown on any error
+	*/
+   @Test(timeout=5000L)
+   public void testRemoteNotificationListenerNonExpectedHandback() throws Exception {
+	   def gmx = null;
+	   def latch = new CountDownLatch(1);
+	   try {
+		   gmx = Gmx.remote(jmxUrl(port));
+		   gmx.installRemote();
+		   def objectName = NotificationTriggerService.register(gmx.mbeanServer);
+		   def tns = gmx.mbean(objectName);
+		   def userData = null;
+		   def userDataReference = System.nanoTime();
+		   def listener = gmx.addListener(objectName, {
+			   userData = it.getUserData();
+			   latch.countDown();
+		   });
+	   	   Assert.assertFalse("The handback expected of the listener", listener.isExpectHandback());
+		   Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+		   tns.sendMeANotification(userDataReference);
+		   latch.await(5000, TimeUnit.MILLISECONDS);
+		   Assert.assertEquals("The user data in the received notification", userDataReference, userData);
+		   
+	   } finally {
+		   if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+	   }
+   }
+
 
 }
 

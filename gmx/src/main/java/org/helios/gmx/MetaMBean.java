@@ -46,9 +46,11 @@ import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanOperationInfo;
 import javax.management.MBeanParameterInfo;
+import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
 import org.helios.gmx.jmx.ObjectNameAwareListener;
+import org.helios.gmx.jmx.ObjectNameAwareListenerImpl;
 import org.helios.gmx.util.JMXHelper;
 import org.helios.gmx.util.Primitive;
 
@@ -449,13 +451,13 @@ public class MetaMBean implements GroovyObject {
 	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addNotificationListener(Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+	public ObjectNameAwareListener addListener(Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
 		if(gmx.isRemote()) {
 			if(!gmx.isRemoted()) {
 				gmx.installRemote();
 			}			
-		}
-		return gmx.addNotificationListener(objectName.toString(), listener, filter, handback);				
+		}		
+		return gmx.addListener(objectName.toString(), listener, filter, handback);				
 	}
 	
 	/**
@@ -463,10 +465,19 @@ public class MetaMBean implements GroovyObject {
 	 * @param listener A closure that will passed the notification and handback.
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addNotificationListener(Closure<Void> listener) {
-		return addNotificationListener(listener, null, null);
+	public ObjectNameAwareListener addListener(Closure<Void> listener) {
+		return addListener(listener, null, null);
 	}
 	
+//	/**
+//	 * Registers a notification listener with the MBeanServer on the MBean represented by this MetaMBean
+//	 * @param listener A closure that will passed the notification and handback.
+//	 * @return The wrapped listener that can be used to unregister the listener
+//	 */
+//	public ObjectNameAwareListener addListener(NotificationListener listener) {
+//		return gmx.addListener()
+//		
+//	}
 	
 
 	/**

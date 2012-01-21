@@ -45,6 +45,10 @@ public class ClosureWrappingNotificationListener implements Serializable, Object
 	protected final Closure<?> closure;
 	/** Additional closure arguments */
 	protected final Object[] arguments;
+	/** Indicates if the notification expects a handback */
+	protected final boolean expectHandback;
+	
+	
 	/** The ObjectName this listener was registered on */
 	protected final ObjectName objectName;
 	
@@ -53,14 +57,26 @@ public class ClosureWrappingNotificationListener implements Serializable, Object
 	
 	/**
 	 * Creates a new ClosureWrappingNotificationListener
+	 * @param expectHandback Indicates if the notification expects a handback
+	 * @param objectName The ObjectName this listener was registered on
+	 * @param closure The wrapped closure
+	 * @param arguments Additional closure arguments
+	 */
+	public ClosureWrappingNotificationListener(boolean expectHandback, ObjectName objectName, Closure<?> closure, Object...arguments) {
+		this.expectHandback = expectHandback;
+		this.closure = closure;
+		this.arguments = arguments;
+		this.objectName = objectName;		
+	}
+	
+	/**
+	 * Creates a new ClosureWrappingNotificationListener that expects a handback
 	 * @param objectName The ObjectName this listener was registered on
 	 * @param closure The wrapped closure
 	 * @param arguments Additional closure arguments
 	 */
 	public ClosureWrappingNotificationListener(ObjectName objectName, Closure<?> closure, Object...arguments) {
-		this.closure = closure;
-		this.arguments = arguments;
-		this.objectName = objectName;		
+		this(true, objectName, closure, arguments);
 	}
 
 
@@ -71,13 +87,18 @@ public class ClosureWrappingNotificationListener implements Serializable, Object
 	 */
 	@Override
 	public void handleNotification(Notification notification, Object handback) {
-		Object[] args = new Object[2 + (arguments==null ? 0 : arguments.length)];
+		int index = expectHandback ? 2 : 1;
+		Object[] args = new Object[index + (arguments==null ? 0 : arguments.length)];
 		args[0] = notification;
-		args[1] = handback;
+		if(expectHandback) args[1] = handback;
 		if(arguments!=null) {
-			System.arraycopy(arguments, 0, args, 2, arguments.length);
+			System.arraycopy(arguments, 0, args, index, arguments.length);
 		}
-		closure.call(args);		
+		try {
+			closure.call(args);
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+		}
 	}
 
 
@@ -89,6 +110,30 @@ public class ClosureWrappingNotificationListener implements Serializable, Object
 	@Override
 	public ObjectName getObjectName() {
 		return objectName;
+	}
+
+	/**
+	 * Returns the wrapped closure
+	 * @return the closure
+	 */
+	public Closure<?> getClosure() {
+		return closure;
+	}
+
+	/**
+	 * Returns the wrapped closure's arguments
+	 * @return the arguments
+	 */
+	public Object[] getArguments() {
+		return arguments;
+	}
+
+	/**
+	 * Indicates if this listener expects a non-null handback
+	 * @return true if this listener expects a non-null handback, false otherwise
+	 */
+	public boolean isExpectHandback() {
+		return expectHandback;
 	}
 	
 	

@@ -31,6 +31,8 @@ import java.io.FileFilter;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.log4j.Logger;
+
 import junit.framework.TestSuite;
 
 /**

@@ -24,19 +24,47 @@
  */
 package org.helios.gmx.notifications;
 
-import org.helios.gmx.mbeansupport.BaseSimpleServiceMBean;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
+import org.helios.gmx.mbeansupport.BaseSimpleService;
+import org.helios.gmx.util.JMXHelper;
 
 /**
- * <p>Title: TestNotificationServiceMBean</p>
- * <p>Description: JMX MBean interface for {@link TestNotificationService}</p> 
+ * <p>Title: NotificationTriggerService</p>
+ * <p>Description: An MBean service that sends notifications to test listeners.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>org.helios.gmx.notifications.TestNotificationServiceMBean</code></p>
+ * <p><code>org.helios.gmx.notifications.NotificationTriggerService</code></p>
  */
-public interface TestNotificationServiceMBean extends BaseSimpleServiceMBean  {
+public class NotificationTriggerService extends BaseSimpleService implements NotificationTriggerServiceMBean {
+	/**  */
+	private static final long serialVersionUID = -2046438869815498554L;
+
+
 	/**
 	 * Sends a JMX notification with the passed value as the user data.
 	 * @param userData The user data to attach to the notification.
 	 */
-	public void sendMeANotification(Object userData);
+	public void sendMeANotification(Object userData) {
+		sendNotification("Notification from [" + objectName + "]", userData);		
+	}
+	
+
+	
+	/**
+	 * Registers an instance of this bean
+	 * @param server The server to register in
+	 * @return the ObjectName generated for the bean
+	 */
+	public static ObjectName register(MBeanServer server) {
+		NotificationTriggerService tns = new NotificationTriggerService();
+		ObjectName on = JMXHelper.getName(tns);
+		try {
+			server.registerMBean(tns, on);
+			return on;
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to register NotificationTriggerService with object name [" + on + "]", e);
+		}
+	}
 }

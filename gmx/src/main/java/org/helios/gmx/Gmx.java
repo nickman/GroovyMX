@@ -395,6 +395,15 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * If this is not a remote Gmx, or the connection is already closed, the command does nothing.
 	 */
 	public void close() {
+		for(Map.Entry<ObjectName, Set<ObjectNameAwareListener>> entry: registeredNotificationListeners.entrySet()) {
+			for(ObjectNameAwareListener listener: entry.getValue()) {
+				try {
+					removeNotificationListener(listener.getObjectName(), listener);
+				} catch (Exception e) {}
+			}
+			entry.getValue().clear();
+		}
+		registeredNotificationListeners.clear();
 		if(remoteClassLoader!=null) {
 			try { 
 				mbeanServerConnection.unregisterMBean(remoteClassLoader.getObjectName());
@@ -544,8 +553,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addNotificationListener(CharSequence objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
-		return addNotificationListener(JMXHelper.objectName(objectName), listener, filter, handback);
+	public ObjectNameAwareListener addListener(CharSequence objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+		return addListener(JMXHelper.objectName(objectName), listener, filter, handback);
 	}
 	
 	/**
@@ -556,14 +565,14 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addNotificationListener(ObjectName objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+	public ObjectNameAwareListener addListener(ObjectName objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
 		if(isRemote()) {
 			if(!isRemoted()) {
 				installRemote();
 			}			
 		}
 		
-		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(objectName, dehydrator.dehydrate(listener));
+		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(handback!=null, objectName, dehydrator.dehydrate(listener));
 		_addRegisteredListener(onAwareListener);
 		mbeanServerConnection.addNotificationListener(objectName, onAwareListener, new ClosureWrappingNotificationFilter(dehydrator.dehydrate(filter)), handback);
 		return onAwareListener;
@@ -575,8 +584,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param listener A closure that will passed the notification and handback.
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addNotificationListener(CharSequence objectName, Closure<Void> listener) {
-		return addNotificationListener(objectName, listener, null, null);
+	public ObjectNameAwareListener addListener(CharSequence objectName, Closure<Void> listener) {
+		return addListener(objectName, listener, null, null);
 	}
 	
 	/**
@@ -585,10 +594,28 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param listener A closure that will passed the notification and handback.
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addNotificationListener(ObjectName objectName, Closure<Void> listener) {
-		return addNotificationListener(objectName, listener, null, null);
+	public ObjectNameAwareListener addListener(ObjectName objectName, Closure<Void> listener) {
+		return addListener(objectName, listener, null, null);
 	}
 	
+	/**
+	 * Removes a registered listener
+	 * @param name The ObjectName of the MBean where the listener was registered
+	 * @param listener The listener to remove
+	 */
+	public void removeListener(ObjectName name, NotificationListener listener) {
+		mbeanServerConnection.removeNotificationListener(name, listener);
+		_removeRegisteredListener(name, listener);
+	}
+	
+	/**
+	 * Removes a registered listener
+	 * @param listener The object name aware listener to remove
+	 */
+	public void removeListener(ObjectNameAwareListener listener) {
+		mbeanServerConnection.removeNotificationListener(listener.getObjectName(), listener);
+		_removeRegisteredListener(listener.getObjectName(), listener);
+	}
 	
 	
 	/**
@@ -608,6 +635,24 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 		}
 		listeners.add(listener);
 	}
+	
+	/**
+	 * Removes a registered JMX {@link NotificationListener} keyed by {@link ObjectName}.
+	 * @param objectName The {@link ObjectName} of the MBean to remove the listener from
+	 * @param listener The {@link NotificationListener} that was registered
+	 */
+	protected void _removeRegisteredListener(ObjectName objectName, NotificationListener listener) {
+		Set<ObjectNameAwareListener> listeners = registeredNotificationListeners.get(objectName);
+		if(listeners!=null) {
+			synchronized(listeners) {
+				listeners.remove(listener);
+				if(listeners.isEmpty()) {
+					listeners.remove(objectName);
+				}
+			}
+		}		
+	}
+	
 	
 	// =========================================================================================
 	//	MetaMBean operations

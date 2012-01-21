@@ -27,14 +27,16 @@ package org.helios.gmx.util.jvmcontrol;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
-import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.helios.gmx.util.ByteCodeNet;
@@ -61,6 +63,8 @@ public class JVMLauncher {
 	protected final List<String> javaAgent = new ArrayList<String>();
 	/** The launched JVM timeout */
 	protected long timeout = -1; 
+	/** Indicates if a shutdown hook should be registered to kill the process when this VM shuts down */
+	protected boolean shutdownHook = false;
 	
 	/** The classpath */
 	protected final StringBuilder classpath = new StringBuilder();
@@ -79,6 +83,11 @@ public class JVMLauncher {
 	public static final File TMP_DIR = new File(System.getProperty("java.io.tmpdir"));
 	/** The runtime name */
 	public static final String JVM_NAME = ManagementFactory.getRuntimeMXBean().getName();
+	/** A set of strings that when found in this MBean's RuntimeMXBean InputArguments mean the JVM is in debug mode */
+	
+	public static final Set<String> DEBUG_ARGS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+			"-Xdebug", "-Xrunjdwp", "-agentlib"   
+	)));
 	
 	
 	/**
@@ -87,6 +96,7 @@ public class JVMLauncher {
 	 */
 	public static JVMLauncher newJVMLauncher() {
 		JVMLauncher launcher = new JVMLauncher();
+		
 		return launcher;
 	}
 	
@@ -117,6 +127,15 @@ public class JVMLauncher {
 		appendSysProps(p);
 		return this;
 		
+	}
+	
+	/**
+	 * Configures a shutdown hook to kill the launched process on this vm shutdown 
+	 * @return this launcher
+	 */
+	public JVMLauncher shutdownHook() {
+		this.shutdownHook = true;
+		return this;
 	}
 	
 	/**
@@ -270,6 +289,14 @@ public class JVMLauncher {
 			process = processBuilder.start();
 			try {				
 				pid = getPid(process);
+				if(shutdownHook) {
+					final Process finalProcess = process;
+					Runtime.getRuntime().addShutdownHook(new Thread("Shutdown Hook for Launched JVM [" + pid + "]"){
+						public void run() {
+							try { finalProcess.destroy(); } catch (Throwable e) {}
+						}
+					});
+				}				
 			} catch (Exception e) {
 				String errMsg = getError(process);
 				process.destroy();
