@@ -140,6 +140,8 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	
 	/** The platform MBeanServer Default Domain Name */
 	public static final String PLATFORM_DEFAULT_DOMAIN = ManagementFactory.getPlatformMBeanServer().getDefaultDomain();
+	/** The error message template for invalid arguments counts on listener adds */
+	public static final String INVALID_ARG_COUNT_TEMPLATE = "Invalid argument count. Closure expects [%s] but additional supplied closure argument count was [%s]. Diff can be 1 or 2 but was [%s]";
 	
 	/** The standard JMX ObjectName prefix of the remotable MBeanServer MBean */
 	public static final String REMOTE_MBEANSERVER_ON_PREFIX = "org.helios.gmx:service=RemotableMBeanServer,domain=%s,host=%s,port=%s";
@@ -551,10 +553,11 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param listener A closure that will passed the notification and handback.
 	 * @param filter A closure that will be passed the notification to determine if it should be filtered or not. If null, no filtering will be performed before handling notifications.
 	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
+	 * @param closureArgs Optional arguments to the listener closure
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addListener(CharSequence objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
-		return addListener(JMXHelper.objectName(objectName), listener, filter, handback);
+	public ObjectNameAwareListener addListener(CharSequence objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback, Object...closureArgs ) {
+		return addListener(JMXHelper.objectName(objectName), listener, filter, handback, closureArgs);
 	}
 	
 	/**
@@ -563,39 +566,49 @@ public class Gmx implements GroovyObject, MBeanServerConnection, NotificationLis
 	 * @param listener A closure that will passed the notification and handback.
 	 * @param filter A closure that will be passed the notification to determine if it should be filtered or not. If null, no filtering will be performed before handling notifications.
 	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
+	 * @param closureArgs Optional arguments to the listener closure
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addListener(ObjectName objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+	public ObjectNameAwareListener addListener(ObjectName objectName, Closure<Void> listener, Closure<Boolean> filter, Object handback, Object...closureArgs ) {
 		if(isRemote()) {
 			if(!isRemoted()) {
 				installRemote();
 			}			
 		}
-		
-		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(handback!=null, objectName, dehydrator.dehydrate(listener));
+		int expectedArgCount = listener.getParameterTypes().length;
+		int clozureSuppliedArgCount = closureArgs==null ? 0 : closureArgs.length;
+		int notificationSuppliedArgCount = expectedArgCount-clozureSuppliedArgCount;
+		if(notificationSuppliedArgCount <1 || notificationSuppliedArgCount >2) {
+			throw new IllegalArgumentException(String.format(INVALID_ARG_COUNT_TEMPLATE, expectedArgCount, clozureSuppliedArgCount, notificationSuppliedArgCount));
+		} 
+		boolean expectsHandback = notificationSuppliedArgCount==2;
+		ObjectNameAwareListener onAwareListener = new ClosureWrappingNotificationListener(expectsHandback, objectName, dehydrator.dehydrate(listener), closureArgs);
 		_addRegisteredListener(onAwareListener);
 		mbeanServerConnection.addNotificationListener(objectName, onAwareListener, new ClosureWrappingNotificationFilter(dehydrator.dehydrate(filter)), handback);
 		return onAwareListener;
 	}
 	
+	
 	/**
 	 * Registers a JMX {@link NotificationListener} with the {@link MBeanServer}
 	 * @param objectName The JMX {@link ObjectName} that represents the MBeans from which to receive notifications
 	 * @param listener A closure that will passed the notification and handback.
+	 * @param closureArgs Optional arguments to the listener closure
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addListener(CharSequence objectName, Closure<Void> listener) {
-		return addListener(objectName, listener, null, null);
+	public ObjectNameAwareListener addListener(CharSequence objectName, Closure<Void> listener, Object...closureArgs) {
+		return addListener(objectName, listener, null, null, closureArgs);
 	}
 	
 	/**
 	 * Registers a JMX {@link NotificationListener} with the {@link MBeanServer}
 	 * @param objectName The JMX {@link ObjectName} that represents the MBeans from which to receive notifications
 	 * @param listener A closure that will passed the notification and handback.
+	 * @param closureArgs Optional arguments to the listener closure
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addListener(ObjectName objectName, Closure<Void> listener) {
-		return addListener(objectName, listener, null, null);
+	public ObjectNameAwareListener addListener(ObjectName objectName, Closure<Void> listener, Object...closureArgs) {
+		return addListener(objectName, listener, null, null, closureArgs);
 	}
 	
 	/**

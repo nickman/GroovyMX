@@ -1,4 +1,5 @@
 import javax.management.ObjectName;
+import javax.management.Notification;
 
 import java.lang.management.ManagementFactory;
 import java.util.Random;
@@ -39,6 +40,8 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	def testCount = countTestCases();
 	/** The number of test methods executed */
 	def testsExecuted = 0;
+	/** A random instance */
+	def random = new Random(System.nanoTime());
 
 	/** Tracks the test name */
 	@Rule
@@ -120,7 +123,7 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	 * @throws Exception thrown on any error
 	 */
 	@Test(timeout=5000L)
-    public void testRemoteNotificationListenerExpectedHandback() throws Exception {    	
+    public void testRemoteNotificationListenerExpectedNullHandback() throws Exception {    	
     	def gmx = null;    	
 		def latch = new CountDownLatch(1);
     	try {	    	
@@ -129,23 +132,60 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 	    	def objectName = NotificationTriggerService.register(gmx.mbeanServer);
 	    	def tns = gmx.mbean(objectName);
 	    	def userData = null;
+			def handback = "foo";
 	    	def userDataReference = System.nanoTime();
 	    	def listener  = gmx.addListener(objectName, {n, h ->
 	    		userData = n.getUserData();
+				handback = h;
 				latch.countDown();
-	    	}, null, 1);
+	    	}, null, null);
 			Assert.assertTrue("The handback expected of the listener", listener.isExpectHandback());
 	    	Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
 	    	tns.sendMeANotification(userDataReference);
 			latch.await(5000, TimeUnit.MILLISECONDS);
 	    	Assert.assertEquals("The user data in the received notification", userDataReference, userData);
+			Assert.assertNull("The handback", handback);
 	    	
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     	}
     }
-    
+	
 	/**
+	* Tests a simple notification listener registration with an expected (and non null) handback
+	* @throws Exception thrown on any error
+	*/
+   @Test(timeout=5000L)
+   public void testRemoteNotificationListenerExpectedNonNullHandback() throws Exception {
+	   def gmx = null;
+	   def latch = new CountDownLatch(1);
+	   try {
+		   gmx = Gmx.remote(jmxUrl(port));
+		   gmx.installRemote();
+		   def objectName = NotificationTriggerService.register(gmx.mbeanServer);
+		   def tns = gmx.mbean(objectName);
+		   def userData = null;
+		   def handback = "foo";
+		   def userDataReference = System.nanoTime();
+		   def listener  = gmx.addListener(objectName, {n, h ->
+			   userData = n.getUserData();
+			   handback = h;
+			   latch.countDown();
+		   }, null, "bar");
+		   Assert.assertTrue("The handback expected of the listener", listener.isExpectHandback());
+		   Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+		   tns.sendMeANotification(userDataReference);
+		   latch.await(5000, TimeUnit.MILLISECONDS);
+		   Assert.assertEquals("The user data in the received notification", userDataReference, userData);
+		   Assert.assertEquals("The handback", "bar", handback);
+		   
+	   } finally {
+		   if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+	   }
+   }
+
+    
+   /**
 	* Tests a simple notification listener registration with an non-expected handback
 	* @throws Exception thrown on any error
 	*/
@@ -174,6 +214,105 @@ class GmxSameHostRemoteVMTestCase extends GroovyTestCase {
 		   if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
 	   }
    }
+   
+   /**
+   * Tests a simple notification listener registration with closure arguments
+   * @throws Exception thrown on any error
+   */
+  @Test(timeout=5000L)
+  public void testRemoteNotificationListenerWithClosureArgumentsNoHandback() throws Exception {
+	  def gmx = null;
+	  def latch = new CountDownLatch(1);
+	  try {
+		  gmx = Gmx.remote(jmxUrl(port));
+		  gmx.installRemote();
+		  def objectName = NotificationTriggerService.register(gmx.mbeanServer);
+		  def tns = gmx.mbean(objectName);
+		  def userData = null;
+		  def numA = random.nextLong();
+		  def numB = random.nextLong();
+		  def numC = random.nextLong();
+		  def result = 1L;
+		  def notification = null;
+		  def userDataReference = System.nanoTime();
+		  def listener = gmx.addListener(objectName, {notif, a, b, c ->
+			  notification = notif;
+			  result = (a + b + c);
+			  latch.countDown();
+		  }, numA, numB, numC);
+		  Assert.assertFalse("The handback expected of the listener", listener.isExpectHandback());
+		  Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+		  tns.sendMeANotification(userDataReference);
+		  latch.await(5000, TimeUnit.MILLISECONDS);
+		  Assert.assertEquals("The sum of numbers calculated", (numA + numB + numC), result);
+		  Assert.assertEquals("The notification", Notification.class, notification.getClass());
+		  
+	  } finally {
+		  if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+	  }
+  }
+
+  /**
+  * Tests a simple notification listener registration with closure arguments and a handback
+  * @throws Exception thrown on any error
+  */
+ @Test(timeout=5000L)
+ public void testRemoteNotificationListenerWithClosureArgumentsWithHandback() throws Exception {
+	 def gmx = null;
+	 def latch = new CountDownLatch(1);
+	 try {
+		 gmx = Gmx.remote(jmxUrl(port));
+		 gmx.installRemote();
+		 def objectName = NotificationTriggerService.register(gmx.mbeanServer);
+		 def tns = gmx.mbean(objectName);
+		 def handback = null;
+		 def numA = random.nextLong();
+		 def numB = random.nextLong();
+		 def numC = random.nextLong();
+		 def result = 1L;
+		 def notification = null;
+		 def handbackValue = System.nanoTime();
+		 def listener = gmx.addListener(objectName, {notif, h, a, b, c ->
+			 notification = notif;
+			 handback = h;
+			 result = (a + b + c);
+			 latch.countDown();
+		 }, null, handbackValue, numA, numB, numC);
+		 Assert.assertTrue("The handback expected of the listener", listener.isExpectHandback());
+		 Assert.assertEquals("The number of notification listeners registered", 1, tns.ListenerCount);
+		 tns.sendMeANotification("foo");
+		 latch.await(5000, TimeUnit.MILLISECONDS);
+		 Assert.assertEquals("The sum of numbers calculated", (numA + numB + numC), result);
+		 Assert.assertEquals("The notification", Notification.class, notification.getClass());
+		 Assert.assertEquals("The notification user data", "foo", notification.getUserData());
+		 Assert.assertEquals("The handback", handbackValue, handback);
+		 
+	 } finally {
+		 if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+	 }
+ }
+
+   /**
+   * Tests a closure listener registration with an invalid number of supplied arguments
+   * @throws Exception thrown on any error
+   */
+  @Test
+  public void testRemoteNotificationListenerInvalidSuppliedArgCount() throws Exception {
+	  def gmx = Gmx.newInstance();
+	  def exception = null;
+	  def objectName = JMXHelper.objectName("foo:name=bar");
+	  try {
+		  gmx.addListener(objectName, {}, "foo");
+	  } catch (e) {
+	  	exception = e;		
+	  } finally {
+		  if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
+	  }
+	  Assert.assertNotNull("The exception", exception);
+	  println exception.getMessage();
+	  Assert.assertEquals("The exception error message", exception.getMessage(), String.format(Gmx.INVALID_ARG_COUNT_TEMPLATE, 1, 1, 0));
+  }
+
 
 
 }

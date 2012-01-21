@@ -449,24 +449,26 @@ public class MetaMBean implements GroovyObject {
 	 * @param listener A closure that will passed the notification and handback.
 	 * @param filter A closure that will be passed the notification to determine if it should be filtered or not. If null, no filtering will be performed before handling notifications.
 	 * @param handback The object to be passed back to the listener closure. Can be null (so long as the notification is not expecting it....)
+	 * @param closureArgs Optional arguments to the listener closure
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addListener(Closure<Void> listener, Closure<Boolean> filter, Object handback ) {
+	public ObjectNameAwareListener addListener(Closure<Void> listener, Closure<Boolean> filter, Object handback, Object...closureArgs ) {
 		if(gmx.isRemote()) {
 			if(!gmx.isRemoted()) {
 				gmx.installRemote();
 			}			
 		}		
-		return gmx.addListener(objectName.toString(), listener, filter, handback);				
+		return gmx.addListener(objectName.toString(), listener, filter, handback, closureArgs);				
 	}
 	
 	/**
 	 * Registers a notification listener with the MBeanServer on the MBean represented by this MetaMBean
 	 * @param listener A closure that will passed the notification and handback.
+	 * @param closureArgs Optional arguments to the listener closure
 	 * @return The wrapped listener that can be used to unregister the listener
 	 */
-	public ObjectNameAwareListener addListener(Closure<Void> listener) {
-		return addListener(listener, null, null);
+	public ObjectNameAwareListener addListener(Closure<Void> listener, Object...closureArgs) {
+		return addListener(listener, null, null, closureArgs);
 	}
 	
 //	/**
