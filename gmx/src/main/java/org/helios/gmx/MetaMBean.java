@@ -24,10 +24,13 @@
  */
 package org.helios.gmx;
 
+import groovy.lang.Binding;
 import groovy.lang.Closure;
 import groovy.lang.GroovyObject;
+import groovy.lang.GroovyShell;
 import groovy.lang.GroovySystem;
 import groovy.lang.MetaClass;
+import groovy.lang.Script;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -46,11 +49,9 @@ import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanOperationInfo;
 import javax.management.MBeanParameterInfo;
-import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
 import org.helios.gmx.jmx.ObjectNameAwareListener;
-import org.helios.gmx.jmx.ObjectNameAwareListenerImpl;
 import org.helios.gmx.util.JMXHelper;
 import org.helios.gmx.util.Primitive;
 
@@ -75,6 +76,11 @@ public class MetaMBean implements GroovyObject {
 	protected final Map<String, TreeSet<OperationSignature>> operations = new HashMap<String, TreeSet<OperationSignature>>();
 	/** The instance MetaClass */
 	protected MetaClass metaClass;
+	/** The dynamically generated script text used to invoke mbean operations */
+	protected final AtomicReference<String> invokerScriptText = new AtomicReference<String>(null);
+	/** The dynamically generated script used to invoke mbean operations */
+	protected Script invokerScript = null;
+	
 	
 	
 	
@@ -116,21 +122,82 @@ public class MetaMBean implements GroovyObject {
 					attributeNames.add(minfo.getName());
 				}
 			}
+			final StringBuilder scriptBuffer = new StringBuilder();
+			final Set<String> imports = new HashSet<String>();		
 			for(MBeanOperationInfo minfo: mbeanInfo.get().getOperations()) {
-				TreeSet<OperationSignature> opSigs = operations.get(minfo.getName());
-				if(opSigs==null) {
-					opSigs = new TreeSet<OperationSignature>();
-					operations.put(minfo.getName(), opSigs);
+				final StringBuilder params = new StringBuilder();
+				final StringBuilder signature = new StringBuilder("[");
+				final StringBuilder values = new StringBuilder("[");					
+				addImport(minfo.getReturnType(), imports);
+				scriptBuffer.append("public Object ").append(minfo.getName()).append("(");				
+				MBeanParameterInfo[] pinfos = minfo.getSignature();
+				if(pinfos!=null && pinfos.length>0) {
+					int cnt = 0;
+					for(MBeanParameterInfo pinfo: pinfos) {
+						addImport(pinfo.getType(), imports);
+						params.append(renderTypeName(pinfo.getType())).append(" p").append(cnt).append(",");
+						signature.append("'").append(pinfo.getType()).append("',");
+						values.append("p").append(cnt).append(",");
+						cnt++;
+					}
+					signature.deleteCharAt(signature.length()-1);
+					values.deleteCharAt(values.length()-1);
+					params.deleteCharAt(params.length()-1);
 				}
-				OperationSignature newOp = OperationSignature.newInstance(minfo); 
-				if(opSigs.contains(newOp)) {
-					System.err.println("WARN: Overwriten Op:" + newOp);					
-				}
-				opSigs.add(newOp);		
-			}			
+				
+				
+				params.append(") {");
+				signature.append("] as String[]);");
+				values.append("] as Object[],");
+				scriptBuffer.append(params);
+				scriptBuffer.append("\n\treturn server.invoke(objectName, '").append(minfo.getName()).append("', ");
+				scriptBuffer.append(values).append(signature).append("\n}\n");
+			}
+			scriptBuffer.insert(0, renderImports(imports));
+			System.out.println(scriptBuffer.toString());
+			invokerScriptText.set(scriptBuffer.toString());
+			invokerScript = new GroovyShell().parse(scriptBuffer.toString());
+			Binding binding = new Binding();
+			binding.setProperty("server", gmx.getMBeanServerConnection());
+			binding.setProperty("objectName", objectName);
+			invokerScript.setBinding(binding);
 		} catch (Exception e) {			
 			throw new RuntimeException("Failed to acquire MBeanInfo for MBean [" + objectName + "]", e);
 		}	
+	}
+	
+	protected String renderImports(final Set<String> imports) {
+		StringBuilder b = new StringBuilder();
+		for(String s: imports) {
+			b.append(s);
+		}
+		return b.toString();
+	}
+	
+	protected void addImport(String className, final Set<String> imports) {
+		try {
+			imports.add("import " + Class.forName(className).getPackage().getName() + ".*;\n");
+		} catch (Exception e) {}
+	}
+	
+	protected String renderTypeName(String name) throws Exception {
+		if(Primitive.isPrimitiveName(name)) {
+			return Primitive.getPrimitive(name).getPclazz().getName();
+		}
+		Class<?> clazz = Class.forName(name);
+		if(clazz.isArray()) {
+			StringBuilder b = new StringBuilder();
+			Class<?> arrClass = clazz;
+			do {
+				b.append("[]");
+				arrClass = arrClass.getComponentType();
+			} while(arrClass.isArray());
+			b.insert(0, arrClass.getName());
+			return b.toString();
+		} else {
+			return name;
+		}
+		
 	}
 
 	/**
@@ -165,73 +232,9 @@ public class MetaMBean implements GroovyObject {
 	 */
 	@Override
 	public Object invokeMethod(String name, Object arg) {
-		try {
-			Object[] args = null;
-			if(arg.getClass().isArray()) {
-				int length = Array.getLength(arg);
-				args = new Object[length];
-				System.arraycopy(arg, 0, args, 0, length);
-			} else {
-				args = new Object[]{arg};
-			}
-			Set<OperationSignature> opSigs = getOpSigs(name, args.length);
-			
-			if(!opSigs.isEmpty()) {
-				if(opSigs.size()==1) {
-					return gmx.mbeanServerConnection.invoke(objectName, name, args, opSigs.iterator().next().getStrSignature());
-				}
-				// Attempt to match one of the overloads
-				OperationSignature os = matchOpSig(opSigs.toArray(new OperationSignature[opSigs.size()]), args);
-				return gmx.mbeanServerConnection.invoke(objectName, name, args, os.getStrSignature());
-			}
-			return getMetaClass().invokeMethod(this, name, args);
-		} catch (Exception e) {
-			e.printStackTrace(System.err);
-			throw new RuntimeException("Failed to invoke", e);
-		}
+		return invokerScript.invokeMethod(name, arg);
 	}
 	
-	/**
-	 * Attempts to match the passed argument array against one of the OperationSignatures in the passed OperationSignature array 
-	 * @param opSigs An array of OperationSignatures that have the same number of arguments
-	 * @param args The array of arguments to find a matching OperationSignature for
-	 * @return A matching OperationSignature or null if one was not found. If more than one match, a RuntimeException will be thrown.
-	 */
-	protected OperationSignature matchOpSig(OperationSignature[] opSigs, Object...args) {
-		Set<OperationSignature> matches = new HashSet<OperationSignature>();
-		Class<?>[] signature = argsToSignagture(args);
-		for(OperationSignature os: opSigs) {
-			Class<?>[] opSig = os.getSignature();
-			boolean match = true;
-			for(int i = 0; i < signature.length; i++) {
-				Class<?> opType = opSig[i];
-				Class<?> argType = signature[i];
-				if(argType==null) continue;
-				if(opType.equals(UnknownClass.class)) continue;
-				if(opType.isAssignableFrom(argType)) continue;
-				if(Primitive.isValidAssignment(opType, argType)) continue;
-				if((opType.isArray() && !argType.isArray()) || (!opType.isArray() && argType.isArray())) {
-					match = false;
-					break;
-				}
-				if(opType.isArray() && argType.isArray()) {
-					if(Array.getLength(opType) != Array.getLength(argType)) {
-						match = false;
-						break;
-					}
-					if(opType.getComponentType().isAssignableFrom(argType.getComponentType())) continue;
-					if(Primitive.isValidAssignment(opType.getComponentType(), argType.getComponentType())) continue;
-				}
-				
-			}
-			if(match) matches.add(os);
-
-		}
-		
-		if(matches.isEmpty() || matches.size()>1) throw new RuntimeException("Matched multiple OperationSignatures for the passed argument array:" + matches.toString(), new Throwable());
-		return matches.iterator().next();
-		
-	}
 	
 	/**
 	 * Generates an array of classes from an array of objects.

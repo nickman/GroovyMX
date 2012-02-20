@@ -37,23 +37,23 @@ import java.util.Map;
 
 public enum Primitive {
 	/** Primitive descriptor for Byte */
-	BYTE(Byte.class, byte.class),
+	BYTE(Byte.class, byte.class, "B"),
 	/** Primitive descriptor for Boolean */
-	BOOLEAN(Boolean.class, boolean.class),
+	BOOLEAN(Boolean.class, boolean.class, "Z"),
 	/** Primitive descriptor for Short */
-	SHORT(Short.class, short.class),
+	SHORT(Short.class, short.class, "S"),
 	/** Primitive descriptor for Integer */
-	INT(Integer.class, int.class),
+	INT(Integer.class, int.class, "I"),
 	/** Primitive descriptor for Character */
-	CHAR(Character.class, char.class),
+	CHAR(Character.class, char.class, "C"),
 	/** Primitive descriptor for Long */
-	LONG(Long.class, long.class),
+	LONG(Long.class, long.class, "J"),
 	/** Primitive descriptor for Float */
-	FLOAT(Float.class, float.class),
+	FLOAT(Float.class, float.class, "F"),
 	/** Primitive descriptor for Double */
-	DOUBLE(Double.class, double.class),
+	DOUBLE(Double.class, double.class, "D"),
 	/** Primitive descriptor for Void */
-	VOID(Void.class, void.class);
+	VOID(Void.class, void.class, "V");
 	
 	/** The number of entries in the enum */
 	public static final int count = Primitive.values().length;	
@@ -65,6 +65,8 @@ public enum Primitive {
 	private static final Map<String, Primitive> UNAME_TO_P = new HashMap<String, Primitive>(count); 
 	/** A map of Primitives keyed by the upconvert class */
 	private static final Map<Class<?>, Primitive> UCLASS_TO_P = new HashMap<Class<?>, Primitive>(count); 
+	/** A map of Primitives keyed by the opcode symbol */
+	private static final Map<String, Primitive> SYMBOL_TO_P = new HashMap<String, Primitive>(count); 
 	
 	static {
 		for(Primitive p: Primitive.values()) {
@@ -72,6 +74,7 @@ public enum Primitive {
 			PCLASS_TO_P.put(p.pclazz, p);
 			UNAME_TO_P.put(p.uclazz.getName(), p);
 			UCLASS_TO_P.put(p.uclazz, p);
+			SYMBOL_TO_P.put(p.symbol, p);
 		}
 	}
 	
@@ -99,16 +102,20 @@ public enum Primitive {
 	 * Creates a new Primitive 
 	 * @param uclazz the upconvert class for the primitive
 	 * @param pclazz the primitive class for the primitive
+	 * @param symbol The primitive JVM symbol
 	 */
-	private Primitive(Class<?> uclazz, Class<?> pclazz) {
+	private Primitive(Class<?> uclazz, Class<?> pclazz, String symbol) {
 		this.uclazz = uclazz;
 		this.pclazz = pclazz;
+		this.symbol = symbol;
 	}
 	
 	/** The primitive's upconvert class */
 	private final Class<?> uclazz;
 	/** The primitive's primitive class */
 	private final Class<?> pclazz;
+	/** The primitive symbol used in arrays */
+	private final String symbol;
 	
 	/**
 	 * Determines if the passed object is an upconvert for a primitive type
@@ -118,6 +125,28 @@ public enum Primitive {
 	public static boolean isPrimitive(Object obj) {
 		if(obj==null) return false;
 		return PNAME_TO_P.containsKey(obj.getClass());
+	}
+	
+	/**
+	 * Indicates if the passed symbol represents a primitive opcode as listed in table 4.2 of the JVM spec.
+	 * @param symbol The symbol to test which will be trimmed.
+	 * @return true if the passed symbol represents a primitive opcode, false otherwise
+	 */
+	public static boolean isPrimitive(String symbol) {
+		if(symbol==null) return false;
+		return SYMBOL_TO_P.containsKey(symbol.trim());
+	}
+	
+	/**
+	 * Returns the primitive for the passed primitive opcode as listed in table 4.2 of the JVM spec.
+	 * @param symbol The symbol to test which will be trimmed.
+	 * @return a Primitive enum member
+	 */
+	public static Primitive getForSymbol(String symbol) {
+		if(symbol==null) throw new IllegalArgumentException("The passed symbol was null", new Throwable());
+		Primitive p = SYMBOL_TO_P.get(symbol.trim());
+		if(p==null) throw new IllegalArgumentException("The passed symbol [" + symbol.trim() + "] was not a primitive op code", new Throwable());
+		return p;
 	}
 	
 	/**
@@ -285,8 +314,8 @@ public enum Primitive {
 		return uclazz;
 	}
 	/**
-	 * Returns the primitive's upconvert class
-	 * @return the primitive's upconvert class
+	 * Returns the primitive's downconvert class
+	 * @return the primitive's downconvert class
 	 */
 	public Class<?> getPclazz() {
 		return pclazz;

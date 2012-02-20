@@ -24,9 +24,11 @@
  */
 package org.helios.gmx;
 import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
 import java.util.Random;
 
 import javax.management.ObjectName;
+import javax.management.openmbean.CompositeData;
 
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
@@ -100,7 +102,7 @@ public class GmxSameHostRemoteVMTestCase {
 	    	jvmProcess = JVMLauncher.newJVMLauncher().timeout(5000).basicPortJmx(port).start();
     		//jvmProcess = JVMLauncher.newJVMLauncher().timeout(50000).basicPortJmx(port).debug(1889, true, true).start();
 	    	String remotePid = jvmProcess.getProcessId();
-	    	gmx = Gmx.remote(jmxUrl(port));
+	    	gmx = Gmx.remote(jmxUrl(port));	    	
 	    	String remoteRuntimeName = (String)gmx.mbean(ManagementFactory.RUNTIME_MXBEAN_NAME).getProperty("Name");
 	    	String remoteRuntimePid = remoteRuntimeName.split("@")[0];	    	
 	    	Assert.assertEquals("The remote runtime pid", remotePid, remoteRuntimePid);
@@ -109,6 +111,7 @@ public class GmxSameHostRemoteVMTestCase {
 	    	int exitCode = jvmProcess.stop();
 	    	jvmProcess = null;
 	    	Assert.assertEquals("The JVM process exit code", 0, exitCode);
+	    	
     	} finally {
     		if(gmx!=null) try { gmx.close(); } catch (Exception e) {}
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
@@ -145,6 +148,24 @@ public class GmxSameHostRemoteVMTestCase {
     		if(jvmProcess!=null) try { jvmProcess.destroy(); } catch (Exception e) {}    		
     	}    	
     }
+    
+    @Test
+    public void testNewMBeanOpInvoker() throws Exception {
+    	Gmx gmx = null;
+    	try {
+    		gmx = Gmx.newInstance();
+    		MetaMBean mbean = gmx.mbean(ManagementFactory.THREAD_MXBEAN_NAME);
+    		ThreadInfo directThreadInfo = ((ThreadInfo[])ManagementFactory.getThreadMXBean().getThreadInfo(new long[]{Thread.currentThread().getId()}))[0];    		
+    		CompositeData[] gmxCompDatas = (CompositeData[]) mbean.invokeMethod("getThreadInfo", new long[]{Thread.currentThread().getId()});
+    		ThreadInfo gmxThreadInfo = ThreadInfo.from(gmxCompDatas[0]);
+    		Assert.assertEquals("The Thread Name", directThreadInfo.getThreadName(), gmxThreadInfo.getThreadName());
+    		Assert.assertEquals("The Thread ID", directThreadInfo.getThreadId(), gmxThreadInfo.getThreadId());
+    		Assert.assertEquals("The Thread toString", directThreadInfo.toString(), gmxThreadInfo.toString());
+    	} finally {
+    		
+    	}
+    }
+    
     
 
 }
