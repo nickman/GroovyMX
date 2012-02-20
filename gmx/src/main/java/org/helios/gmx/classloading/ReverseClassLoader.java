@@ -386,6 +386,7 @@ public class ReverseClassLoader extends AbstractHandler  {
 		log.log("Request Target ", request.getMethod() , " [" , target , "] \n\tfrom [" , request.getRemoteAddr() , ":" , request.getRemotePort() , "]");
 		boolean jarRequest = (target.equals(HTTP_URI_PREFIX + HTTP_URI_JAR_SUFFIX));		
 		byte[] classBytes = null;
+		boolean isHead = "HEAD".equals(request.getMethod());
 		if(!jarRequest) {
 			String resource = target.replace(HTTP_URI_PREFIX, "");
 			if(dynamicResources.containsKey(resource)) {
@@ -428,13 +429,15 @@ public class ReverseClassLoader extends AbstractHandler  {
         		return;
         	}
         	response.setContentLength(classBytes.length);
-        	if(gzipOut!=null) {
-        		gzipOut.write(classBytes);
-        		gzipOut.flush();
-        		gzipOut.finish();        		
-        	} else {
-        		os.write(classBytes);        		
-        	}        	
+        	if(!isHead) {
+	        	if(gzipOut!=null) {
+	        		gzipOut.write(classBytes);
+	        		gzipOut.flush();
+	        		gzipOut.finish();        		
+	        	} else {
+	        		os.write(classBytes);        		
+	        	}
+        	}
         }
         os.flush();        
         log.log("Wrote [" + classBytes.length , "] for resource [", target, "]");
